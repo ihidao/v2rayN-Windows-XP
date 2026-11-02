@@ -1,0 +1,90 @@
+
+name: Build V2Ray Core for Windows XP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - xp-core-v4.31.3
+    paths:
+      - 'v2ray-core/**'
+      - '.github/workflows/build-xp-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install bootstrap Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.13'
+
+      - name: Build XP-compatible Go toolchain
+        shell: bash
+        run: |
+          git clone --depth 1 \
+            --branch release-branch.go1.21-nt51 \
+            https://github.com/BieHDC/go-backports.git
+
+          cd go-backports/src
+
+          export GOROOT_BOOTSTRAP="$(go env GOROOT)"
+          ./make.bash
+
+          echo "GOROOT=$GITHUB_WORKSPACE/go-backports" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/go-backports/bin" >> $GITHUB_PATH
+
+      - name: Check Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOOS
+          go env GOARCH
+
+      - name: Download Core dependencies
+        working-directory: v2ray-core
+        env:
+          GOTOOLCHAIN: local
+        run: go mod download
+
+      - name: Build V2Ray for Windows XP
+        working-directory: v2ray-core
+        shell: bash
+        env:
+          GOOS: windows
+          GOARCH: '386'
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+        run: |
+          go build -o v2ray.exe \
+            -trimpath \
+            -ldflags "-s -w -buildid=" \
+            ./main
+
+          go build -o v2ctl.exe \
+            -trimpath \
+            -ldflags "-s -w -buildid=" \
+            -tags confonly \
+            ./infra/control/main
+
+      - name: Prepare output
+        shell: bash
+        run: |
+          mkdir -p release-xp
+          cp v2ray-core/v2ray.exe release-xp/
+          cp v2ray-core/v2ctl.exe release-xp/
+
+      - name: Upload XP binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: V2Ray-Core-Windows-XP-x86
+          path: release-xp/
+          if-no-files-found: error
+          retention-days: 30
