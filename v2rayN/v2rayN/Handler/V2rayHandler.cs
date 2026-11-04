@@ -18,9 +18,6 @@ namespace v2rayN.Handler
         private string coreUrl;
         public event ProcessDelegate ProcessEvent;
         private Process _process;
-        private string _detectedCorePath = string.Empty;
-        private bool _detectedCoreIsV2ray5;
-        private bool _coreVersionDetected;
 
         public V2rayHandler()
         {
@@ -41,10 +38,6 @@ namespace v2rayN.Handler
 
             if (Global.reloadV2ray)
             {
-                // Detect the core version after the main window has been shown,
-                // but before generating configuration and starting the core.
-                DetectCoreVersion();
-
                 string fileName = Utils.GetPath(v2rayConfigRes);
                 string msg;
                 if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
@@ -191,100 +184,90 @@ namespace v2rayN.Handler
 
         // Detect the core CLI once during the first UI startup, before launching it.
         // Cache the result so reloads and speed tests do not spawn extra probe processes.
-        private void DetectCoreVersion()
+        // Try the V2Ray 5.x command line first, then fall back to the 4.x syntax.
+        // A process that remains alive for the startup check is considered started.
+        private Process TryStartCore(string fileName, string arguments, out string failure)
         {
-            string fileName = V2rayFindexe();
-            if (string.IsNullOrEmpty(fileName))
-                return;
+            failure = string.Empty;
+            Process p = new Process();
+            StringBuilder errorText = new StringBuilder();
+            p.StartInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                WorkingDirectory = Utils.StartupPath(),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8
+            };
+            p.OutputDataReceived += (sender, e) =>
+            {
+                if (!String.IsNullOrEmpty(e.Data))
+                    ShowMsg(false, e.Data + Environment.NewLine);
+            };
+            p.ErrorDataReceived += (sender, e) =>
+            {
+                if (!String.IsNullOrEmpty(e.Data))
+                    lock (errorText) errorText.AppendLine(e.Data);
+            };
 
-            if (_coreVersionDetected
-                && string.Equals(_detectedCorePath, fileName, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            _detectedCorePath = fileName;
-            _detectedCoreIsV2ray5 = ProbeV2ray5(fileName);
-            _coreVersionDetected = true;
-        }
-
-        private bool ProbeV2ray5(string fileName)
-        {
             try
             {
-                ProcessStartInfo info = new ProcessStartInfo();
-                info.FileName = fileName;
-                info.Arguments = "version";
-                info.WorkingDirectory = Utils.StartupPath();
-                info.UseShellExecute = false;
-                info.CreateNoWindow = true;
-                info.RedirectStandardOutput = true;
-                info.RedirectStandardError = true;
+                if (!p.Start())
+                    throw new Exception("Process.Start returned false.");
 
-                StringBuilder versionText = new StringBuilder();
-                using (Process probe = new Process())
-                {
-                    probe.StartInfo = info;
-                    probe.OutputDataReceived += (sender, e) =>
-                    {
-                        if (!String.IsNullOrEmpty(e.Data))
-                            lock (versionText) versionText.AppendLine(e.Data);
-                    };
-                    probe.ErrorDataReceived += (sender, e) =>
-                    {
-                        if (!String.IsNullOrEmpty(e.Data))
-                            lock (versionText) versionText.AppendLine(e.Data);
-                    };
+                p.BeginOutputReadLine();
+                p.BeginErrorReadLine();
 
-                    if (!probe.Start())
-                        return false;
+                if (!p.WaitForExit(1500))
+                    return p;
 
-                    probe.BeginOutputReadLine();
-                    probe.BeginErrorReadLine();
-
-                    if (!probe.WaitForExit(3000))
-                    {
-                        try { probe.Kill(); } catch { }
-                        return false;
-                    }
-                    probe.WaitForExit();
-
-                    string text;
-                    lock (versionText) text = versionText.ToString();
-                    return text.IndexOf("V2Ray 5.", StringComparison.OrdinalIgnoreCase) >= 0
-                        || text.IndexOf("V2Fly 5.", StringComparison.OrdinalIgnoreCase) >= 0;
-                }
+                p.WaitForExit();
+                lock (errorText) failure = errorText.ToString();
+                if (String.IsNullOrEmpty(failure))
+                    failure = "内核进程在启动检查期间退出，退出代码: " + p.ExitCode;
+                p.Dispose();
+                return null;
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                lock (errorText) failure = errorText.ToString();
+                failure = ex.Message + (String.IsNullOrEmpty(failure) ? "" : Environment.NewLine + failure);
+                try { p.Dispose(); } catch { }
+                return null;
             }
         }
 
-        private bool IsV2ray5(string fileName)
+        private Process StartCoreWithFallback(string fileName, string configFile, out string failure)
         {
-            if (!_coreVersionDetected
-                || !string.Equals(_detectedCorePath, fileName, StringComparison.OrdinalIgnoreCase))
+            string error5;
+            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"",
+                out error5);
+            if (p != null)
             {
-                _detectedCorePath = fileName;
-                _detectedCoreIsV2ray5 = ProbeV2ray5(fileName);
-                _coreVersionDetected = true;
+                failure = string.Empty;
+                return p;
             }
-            return _detectedCoreIsV2ray5;
-        }
 
-        private string GetConfigArguments(string fileName)
-        {
-            if (IsV2ray5(fileName))
-                return "run -c \"" + Utils.GetPath(v2rayConfigRes) + "\"";
-            return "-config \"" + Utils.GetPath(v2rayConfigRes) + "\"";
-        }
+            ShowMsg(false, "V2Ray 5.x 启动方式失败，尝试 4.x 参数方式..." + Environment.NewLine
+                + error5 + Environment.NewLine);
 
-        // Speed-test configurations are written to a temporary file.
-        // V2Ray 5.18 on Windows treats "stdin:" as a literal filename.
-        private string GetConfigStringArguments(string fileName, string configFile)
-        {
-            if (IsV2ray5(fileName))
-                return "run -c \"" + configFile + "\"";
-            return "-config \"" + configFile + "\"";
+            string error4;
+            p = TryStartCore(fileName, "-config \"" + configFile + "\"",
+                out error4);
+            if (p != null)
+            {
+                failure = string.Empty;
+                ShowMsg(false, "已通过 V2Ray 4.x 参数方式启动内核。" + Environment.NewLine);
+                return p;
+            }
+
+            failure = "V2Ray core failed to start with both command-line formats."
+                + Environment.NewLine + "[5.x run -c]" + Environment.NewLine + error5
+                + Environment.NewLine + "[4.x -config]" + Environment.NewLine + error4;
+            return null;
         }
 
         private void V2rayStart()
@@ -295,43 +278,13 @@ namespace v2rayN.Handler
                 string fileName = V2rayFindexe();
                 if (fileName == "") return;
 
-                StringBuilder errorText = new StringBuilder();
-                Process p = new Process();
-                p.StartInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = GetConfigArguments(fileName),
-                    WorkingDirectory = Utils.StartupPath(),
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8
-                };
-                p.OutputDataReceived += (sender, e) =>
-                {
-                    if (!String.IsNullOrEmpty(e.Data))
-                        ShowMsg(false, e.Data + Environment.NewLine);
-                };
-                p.ErrorDataReceived += (sender, e) =>
-                {
-                    if (!String.IsNullOrEmpty(e.Data))
-                        lock (errorText) errorText.AppendLine(e.Data);
-                };
+                string failure;
+                Process p = StartCoreWithFallback(fileName,
+                    Utils.GetPath(v2rayConfigRes), out failure);
+                if (p == null)
+                    throw new Exception(failure);
 
-                p.Start();
-                p.PriorityClass = ProcessPriorityClass.High;
-                p.BeginOutputReadLine();
-                p.BeginErrorReadLine();
-
-                if (p.WaitForExit(1500))
-                {
-                    p.WaitForExit();
-                    string error;
-                    lock (errorText) error = errorText.ToString();
-                    throw new Exception("V2Ray core exited during startup. " + error);
-                }
-
+                try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                 _process = p;
                 Global.processJob.AddProcess(p.Handle);
                 ShowMsg(false, "V2Ray core started. PID=" + p.Id);
@@ -357,41 +310,10 @@ namespace v2rayN.Handler
                     "v2rayN-speedtest-" + Guid.NewGuid().ToString("N") + ".json");
                 File.WriteAllText(tempConfigFile, configStr, new UTF8Encoding(false));
 
-                StringBuilder errorText = new StringBuilder();
-                p = new Process();
-                p.StartInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = GetConfigStringArguments(fileName, tempConfigFile),
-                    WorkingDirectory = Utils.StartupPath(),
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8
-                };
-                p.OutputDataReceived += (sender, e) =>
-                {
-                    if (!String.IsNullOrEmpty(e.Data))
-                        ShowMsg(false, e.Data + Environment.NewLine);
-                };
-                p.ErrorDataReceived += (sender, e) =>
-                {
-                    if (!String.IsNullOrEmpty(e.Data))
-                        lock (errorText) errorText.AppendLine(e.Data);
-                };
-
-                p.Start();
-                p.BeginOutputReadLine();
-                p.BeginErrorReadLine();
-
-                if (p.WaitForExit(1500))
-                {
-                    p.WaitForExit();
-                    string error;
-                    lock (errorText) error = errorText.ToString();
-                    throw new Exception("V2Ray speed-test core exited during startup. " + error);
-                }
+                string failure;
+                p = StartCoreWithFallback(fileName, tempConfigFile, out failure);
+                if (p == null)
+                    throw new Exception("V2Ray speed-test core failed to start. " + failure);
 
                 // The core has loaded its configuration; the temporary file is no longer needed.
                 try { File.Delete(tempConfigFile); } catch { }
