@@ -30,7 +30,17 @@ namespace v2rayN.Forms
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
             HideForm();
-            this.Text = Utils.GetVersion();
+            this.Text = Utils.GetVersion() + " for XP";
+
+            // Disable update checks for this Windows XP build.
+            tsbCheckUpdateN.Enabled = false;
+            tsbCheckUpdateCore.Enabled = false;
+            tsbCheckUpdateXrayCore.Enabled = false;
+
+            // Remove the promotion button and its separator from the toolbar.
+            tsbPromotion.Visible = false;
+            toolStripSeparator11.Visible = false;
+
             Global.processJob = new Job();
 
             Application.ApplicationExit += (sender, args) =>
