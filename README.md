@@ -7,4 +7,4 @@
 
 ### Requirements  
 - Microsoft .NET Framework 4.0 for XP
-- Project V core [https://github.com/v2fly/v2ray-core/releases](https://github.com/v2fly/v2ray-core/releases)
+- Project V core [https://github.com/ihidao/v2ray-core_xray-core_for_XP](https://github.com/ihidao/v2ray-core_xray-core_for_XP)
