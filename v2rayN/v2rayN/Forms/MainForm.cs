@@ -30,7 +30,7 @@ namespace v2rayN.Forms
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
             HideForm();
-            this.Text = Utils.GetVersion() + " for XP";
+            this.Text = Utils.GetVersion();
 
             // Disable update checks for this Windows XP build.
             tsbCheckUpdateN.Enabled = false;
