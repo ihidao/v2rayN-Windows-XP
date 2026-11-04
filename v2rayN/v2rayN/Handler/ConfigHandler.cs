@@ -122,13 +122,6 @@ namespace v2rayN.Handler
             //{
             //    config.pacPort = 8888;
             //}
-            if (Utils.IsNullOrEmpty(config.speedTestUrl)
-                || config.speedTestUrl.Equals("http://cachefly.cachefly.net/10mb.test",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                // Migrate the previous built-in test URL to Cloudflare.
-                config.speedTestUrl = Global.SpeedTestUrl;
-            }
             if (Utils.IsNullOrEmpty(config.speedPingTestUrl))
             {
                 config.speedPingTestUrl = Global.SpeedPingTestUrl;

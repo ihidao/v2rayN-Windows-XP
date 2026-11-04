@@ -41,10 +41,6 @@ namespace v2rayN.Handler
             {
                 Task.Factory.StartNew(() => RunRealPing());
             }
-            else if (actionType == "speedtest")
-            {
-                Task.Factory.StartNew(() => RunSpeedTest());
-            }
         }
 
         private void RunPingSub(Action<int> updateFun)
@@ -185,75 +181,6 @@ namespace v2rayN.Handler
             {
                 Utils.SaveLog(ex.Message, ex);
                 return -1;
-            }
-        }
-
-        private void RunSpeedTest()
-        {
-            int pid = -1;
-
-            if (_config.vmess.Count <= 0 || _selecteds == null || _selecteds.Count == 0)
-                return;
-
-            Dictionary<int, int> speedTestPorts;
-            pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
-            if (pid < 0)
-            {
-                _updateFunc(_selecteds[0], UIRes.I18N("OperationFailed"));
-                return;
-            }
-
-            string url = _config.speedTestUrl;
-            const int timeout = 10;
-            try
-            {
-                foreach (int itemIndex in _selecteds)
-                {
-                    if (itemIndex >= _config.vmess.Count)
-                        break;
-                    if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
-                        continue;
-
-                    int localTestPort;
-                    if (!speedTestPorts.TryGetValue(itemIndex, out localTestPort))
-                    {
-                        _updateFunc(itemIndex, "测速端口分配失败");
-                        continue;
-                    }
-                    if (localTestPort <= 0 || !WaitForLocalPort(localTestPort, 5000))
-                    {
-                        _updateFunc(itemIndex, "本地代理端口未监听: " + localTestPort);
-                        continue;
-                    }
-
-                    WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
-                    DownloadHandle downloadHandle = new DownloadHandle();
-                    downloadHandle.UpdateCompleted += (sender, args) =>
-                    {
-                        _updateFunc(itemIndex, args.Msg);
-                    };
-                    downloadHandle.Error += (sender, args) =>
-                    {
-                        Exception error = args.GetException();
-                        _updateFunc(itemIndex, "测速失败: " + (error == null ? "未知错误" : error.Message));
-                    };
-
-                    // Never use v2ray-windows.zip for a speed test. That name is
-                    // reserved for downloaded core/update packages.
-                    string speedTestFile = Path.Combine(Path.GetTempPath(),
-                        "v2rayN-speedtest-" + Guid.NewGuid().ToString("N") + ".tmp");
-                    var ws = downloadHandle.DownloadFileAsync(
-                        url, webProxy, timeout - 2, speedTestFile, true);
-                    Thread.Sleep(1000 * timeout);
-                    if (ws != null)
-                        ws.CancelAsync();
-                    Thread.Sleep(1000 * 2);
-                }
-            }
-            finally
-            {
-                if (pid > 0)
-                    _v2rayHandler.V2rayStopPid(pid);
             }
         }
 

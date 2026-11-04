@@ -127,9 +127,6 @@
   <data name="&gt;&gt;menuCopyServer.Type" xml:space="preserve">
     <value>System.Windows.Forms.ToolStripMenuItem, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
-  <data name="menuSpeedServer.Size" type="System.Drawing.Size, System.Drawing">
-    <value>355, 22</value>
-  </data>
   <data name="tsbReload.Size" type="System.Drawing.Size, System.Drawing">
     <value>97, 53</value>
   </data>
@@ -587,9 +584,6 @@
   <data name="menuTcpingServer.Text" xml:space="preserve">
     <value>Test servers with tcping (Ctrl+O)</value>
   </data>
-  <data name="&gt;&gt;menuSpeedServer.Type" xml:space="preserve">
-    <value>System.Windows.Forms.ToolStripMenuItem, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
   <data name="toolStripSeparator8.Size" type="System.Drawing.Size, System.Drawing">
     <value>6, 56</value>
   </data>
@@ -625,9 +619,6 @@
   </data>
   <data name="toolStripSeparator4.Size" type="System.Drawing.Size, System.Drawing">
     <value>6, 56</value>
-  </data>
-  <data name="menuSpeedServer.Text" xml:space="preserve">
-    <value>Test servers download speed (Ctrl+T)</value>
   </data>
   <data name="&gt;&gt;ssMain.Name" xml:space="preserve">
     <value>ssMain</value>
@@ -1188,9 +1179,6 @@
   </data>
   <data name="&gt;&gt;tsbCheckUpdateCore.Name" xml:space="preserve">
     <value>tsbCheckUpdateCore</value>
-  </data>
-  <data name="&gt;&gt;menuSpeedServer.Name" xml:space="preserve">
-    <value>menuSpeedServer</value>
   </data>
   <data name="menuRemoveDuplicateServer.Size" type="System.Drawing.Size, System.Drawing">
     <value>355, 22</value>

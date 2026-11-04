@@ -529,9 +529,6 @@ namespace v2rayN.Forms
                     case Keys.S:
                         menuScanScreen_Click(null, null);
                         break;
-                    case Keys.T:
-                        menuSpeedServer_Click(null, null);
-                        break;
                 }
             }
             else
@@ -649,19 +646,6 @@ namespace v2rayN.Forms
             //UI.Show(UIRes.I18N("SpeedServerTips"));
 
             Speedtest("realping");
-        }
-
-        private void menuSpeedServer_Click(object sender, EventArgs e)
-        {
-            //if (!config.sysAgentEnabled)
-            //{
-            //    UI.Show(UIRes.I18N("NeedHttpGlobalProxy"));
-            //    return;
-            //}
-
-            //UI.Show(UIRes.I18N("SpeedServerTips"));
-
-            Speedtest("speedtest");
         }
         private void Speedtest(string actionType)
         {

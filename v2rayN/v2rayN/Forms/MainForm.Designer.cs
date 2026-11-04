@@ -56,7 +56,6 @@
             this.menuPingServer = new System.Windows.Forms.ToolStripMenuItem();
             this.menuTcpingServer = new System.Windows.Forms.ToolStripMenuItem();
             this.menuRealPingServer = new System.Windows.Forms.ToolStripMenuItem();
-            this.menuSpeedServer = new System.Windows.Forms.ToolStripMenuItem();
             this.tsbTestMe = new System.Windows.Forms.ToolStripMenuItem();
             this.menuClearServerStatistics = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
@@ -216,7 +215,6 @@
             this.menuPingServer,
             this.menuTcpingServer,
             this.menuRealPingServer,
-            this.menuSpeedServer,
             this.tsbTestMe,
             this.menuClearServerStatistics,
             this.toolStripSeparator6,
@@ -361,12 +359,6 @@
             resources.ApplyResources(this.menuRealPingServer, "menuRealPingServer");
             this.menuRealPingServer.Name = "menuRealPingServer";
             this.menuRealPingServer.Click += new System.EventHandler(this.menuRealPingServer_Click);
-            // 
-            // menuSpeedServer
-            // 
-            resources.ApplyResources(this.menuSpeedServer, "menuSpeedServer");
-            this.menuSpeedServer.Name = "menuSpeedServer";
-            this.menuSpeedServer.Click += new System.EventHandler(this.menuSpeedServer_Click);
             // 
             // tsbTestMe
             // 
@@ -987,7 +979,6 @@
         private System.Windows.Forms.ToolStripMenuItem tsbCheckUpdateCore;
         private System.Windows.Forms.ToolStripMenuItem menuAddServers;
         private System.Windows.Forms.ToolStripMenuItem menuExport2ShareUrl;
-        private System.Windows.Forms.ToolStripMenuItem menuSpeedServer;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator11;
         private System.Windows.Forms.ToolStripDropDownButton tsbHelp;
         private System.Windows.Forms.ToolStripMenuItem tsbAbout;

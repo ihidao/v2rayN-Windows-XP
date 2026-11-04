@@ -77,13 +77,6 @@ namespace v2rayN.Mode
         }
 
         /// <summary>
-        /// 自定义服务器下载测速url
-        /// </summary>
-        public string speedTestUrl
-        {
-            get; set;
-        }
-        /// <summary>
         /// 自定义“服务器真连接延迟”测试url
         /// </summary>
         public string speedPingTestUrl
