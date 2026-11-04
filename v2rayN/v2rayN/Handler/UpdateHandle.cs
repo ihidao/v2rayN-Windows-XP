@@ -318,7 +318,7 @@ namespace v2rayN.Handler
                     if (!string.IsNullOrEmpty(redirectUrl))
                     {
                         if (uiContext != null)
-                            uiContext.Post(delegate { responseHandler(type, redirectUrl); }, null);
+                            uiContext.Post(delegate(object state) { responseHandler(type, redirectUrl); }, null);
                         else
                             responseHandler(type, redirectUrl);
                     }
@@ -331,7 +331,7 @@ namespace v2rayN.Handler
                 {
                     Utils.SaveLog(ex.Message, ex);
                     if (uiContext != null)
-                        uiContext.Post(delegate { _updateFunc(false, ex.Message); }, null);
+                        uiContext.Post(delegate(object state) { _updateFunc(false, ex.Message); }, null);
                     else
                         _updateFunc(false, ex.Message);
                 }
