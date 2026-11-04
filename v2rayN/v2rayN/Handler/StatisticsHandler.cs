@@ -39,7 +39,7 @@ namespace v2rayN.Handler
             updateFunc_ = update;
             Enable = config != null && config.enableStatistics;
             UpdateUI = false;
-            serverStatistics_ = LoadFromFile();
+            serverStatistics_ = LoadStatisticsFromFile();
         }
 
         public void Run()
@@ -215,12 +215,7 @@ namespace v2rayN.Handler
             SaveToFile();
         }
 
-        public void LoadFromFile()
-        {
-            // Retained for compatibility with older call sites.
-        }
-
-        private ServerStatistics LoadFromFile()
+        private ServerStatistics LoadStatisticsFromFile()
         {
             ServerStatistics data = null;
             try
