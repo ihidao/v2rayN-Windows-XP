@@ -1,4 +1,4 @@
-# v2rayN
+# v2rayN v4.20 for XP
 
 ### How to use
 - Download v2rayN.zip from release
