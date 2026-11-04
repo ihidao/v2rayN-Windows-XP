@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - .github/workflows/import-v2rayn420.yml
 
 permissions:
   contents: write
