@@ -479,9 +479,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy /y $(SolutionDir)v2rayUpgrade\$(OutDir)* $(TargetDir)
-
-del $(TargetDir)*.xml $(TargetDir)*.so $(TargetDir)*.dylib
+    <PostBuildEvent>del $(TargetDir)*.xml $(TargetDir)*.so $(TargetDir)*.dylib
 if not "$(ConfigurationName)" == "Debug" del $(TargetDir)*.pdb</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
