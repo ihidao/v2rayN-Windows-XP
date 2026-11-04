@@ -7,57 +7,38 @@ using v2rayN.Mode;
 
 namespace v2rayN.Handler
 {
-
-    /// <summary>
-    /// 消息委托
-    /// </summary>
-    /// <param name="notify">是否显示在托盘区</param>
-    /// <param name="msg">内容</param>
     public delegate void ProcessDelegate(bool notify, string msg);
 
-    /// <summary>
-    /// v2ray进程处理类
-    /// </summary>
     class V2rayHandler
     {
         private static string v2rayConfigRes = Global.v2rayConfigFileName;
         private List<string> lstV2ray;
         private string coreUrl;
         public event ProcessDelegate ProcessEvent;
-        //private int processId = 0;
         private Process _process;
 
         public V2rayHandler()
         {
         }
 
-        /// <summary>
-        /// 载入V2ray
-        /// </summary>
         public void LoadV2ray(Config config)
         {
             if (config.coreType == ECoreType.v2fly_core)
             {
-                lstV2ray = new List<string>
-                {
-                    "wv2ray",
-                    "v2ray"
-                };
+                lstV2ray = new List<string> { "wv2ray", "v2ray" };
                 coreUrl = Global.v2flyCoreUrl;
             }
             else
             {
-                lstV2ray = new List<string>
-                {
-                    "xray"
-                };
+                lstV2ray = new List<string> { "xray" };
                 coreUrl = Global.xrayCoreUrl;
             }
 
             if (Global.reloadV2ray)
             {
                 string fileName = Utils.GetPath(v2rayConfigRes);
-                if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out string msg) != 0)
+                string msg;
+                if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
                 {
                     ShowMsg(false, msg);
                 }
@@ -69,40 +50,25 @@ namespace v2rayN.Handler
             }
         }
 
-        /// <summary>
-        /// 新建进程，载入V2ray配置文件字符串
-        /// 返回新进程pid。
-        /// </summary>
-        public int LoadV2rayConfigString(Config config, List<int> _selecteds)
+        public int LoadV2rayConfigString(Config config, List<int> selecteds)
         {
-            int pid = -1;
-            string configStr = V2rayConfigHandler.GenerateClientSpeedtestConfigString(config, _selecteds, out string msg);
+            string msg;
+            string configStr = V2rayConfigHandler.GenerateClientSpeedtestConfigString(config, selecteds, out msg);
             if (configStr == "")
             {
                 ShowMsg(false, msg);
+                return -1;
             }
-            else
-            {
-                ShowMsg(false, msg);
-                pid = V2rayStartNew(configStr);
-                //V2rayRestart();
-                // start with -config
-            }
-            return pid;
+            ShowMsg(false, msg);
+            return V2rayStartNew(configStr);
         }
 
-        /// <summary>
-        /// V2ray重启
-        /// </summary>
         private void V2rayRestart()
         {
             V2rayStop();
             V2rayStart();
         }
 
-        /// <summary>
-        /// V2ray停止
-        /// </summary>
         public void V2rayStop()
         {
             try
@@ -113,58 +79,37 @@ namespace v2rayN.Handler
                     _process.Dispose();
                     _process = null;
                 }
-                else
+                else if (lstV2ray != null)
                 {
                     foreach (string vName in lstV2ray)
                     {
                         Process[] existing = Process.GetProcessesByName(vName);
                         foreach (Process p in existing)
                         {
-                            string path = p.MainModule.FileName;
-                            if (path == $"{Utils.GetPath(vName)}.exe")
+                            try
                             {
-                                KillProcess(p);
+                                string path = p.MainModule.FileName;
+                                if (string.Equals(path, Utils.GetPath(vName + ".exe"), StringComparison.OrdinalIgnoreCase))
+                                    KillProcess(p);
                             }
+                            catch { }
                         }
                     }
                 }
-
-                //bool blExist = true;
-                //if (processId > 0)
-                //{
-                //    Process p1 = Process.GetProcessById(processId);
-                //    if (p1 != null)
-                //    {
-                //        p1.Kill();
-                //        blExist = false;
-                //    }
-                //}
-                //if (blExist)
-                //{
-                //    foreach (string vName in lstV2ray)
-                //    {
-                //        Process[] killPro = Process.GetProcessesByName(vName);
-                //        foreach (Process p in killPro)
-                //        {
-                //            p.Kill();
-                //        }
-                //    }
-                //}
             }
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
             }
         }
-        /// <summary>
-        /// V2ray停止
-        /// </summary>
+
         public void V2rayStopPid(int pid)
         {
             try
             {
-                Process _p = Process.GetProcessById(pid);
-                KillProcess(_p);
+                Process p = Process.GetProcessById(pid);
+                KillProcess(p);
+                p.Dispose();
             }
             catch (Exception ex)
             {
@@ -174,124 +119,172 @@ namespace v2rayN.Handler
 
         private string V2rayFindexe()
         {
-            //查找v2ray文件是否存在
-            string fileName = string.Empty;
-            //lstV2ray.Reverse();
+            if (lstV2ray == null)
+            {
+                lstV2ray = new List<string> { "wv2ray", "v2ray" };
+                coreUrl = Global.v2flyCoreUrl;
+            }
+
             foreach (string name in lstV2ray)
             {
-                string vName = string.Format("{0}.exe", name);
-                vName = Utils.GetPath(vName);
-                if (File.Exists(vName))
-                {
-                    fileName = vName;
-                    break;
-                }
+                string fileName = Utils.GetPath(name + ".exe");
+                if (File.Exists(fileName))
+                    return fileName;
             }
-            if (Utils.IsNullOrEmpty(fileName))
-            {
-                string msg = string.Format(UIRes.I18N("NotFoundCore"), coreUrl);
-                ShowMsg(false, msg);
-            }
-            return fileName;
+
+            string msg = string.Format(UIRes.I18N("NotFoundCore"), coreUrl ?? Global.v2flyCoreUrl);
+            ShowMsg(false, msg);
+            return string.Empty;
         }
 
-        /// <summary>
-        /// V2ray启动
-        /// </summary>
+        // V2Ray 5.x changed the CLI to "run -c". Older 4.x uses "-config".
+        private bool IsV2ray5(string fileName)
+        {
+            try
+            {
+                ProcessStartInfo info = new ProcessStartInfo();
+                info.FileName = fileName;
+                info.Arguments = "version";
+                info.WorkingDirectory = Utils.StartupPath();
+                info.UseShellExecute = false;
+                info.CreateNoWindow = true;
+                info.RedirectStandardOutput = true;
+                info.RedirectStandardError = true;
+
+                using (Process probe = Process.Start(info))
+                {
+                    if (probe == null) return false;
+                    string output = probe.StandardOutput.ReadToEnd();
+                    string error = probe.StandardError.ReadToEnd();
+                    if (!probe.WaitForExit(3000))
+                    {
+                        try { probe.Kill(); } catch { }
+                        return false;
+                    }
+                    string versionText = output + Environment.NewLine + error;
+                    return versionText.IndexOf("V2Ray 5.", StringComparison.OrdinalIgnoreCase) >= 0
+                        || versionText.IndexOf("V2Fly 5.", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private string GetConfigArguments(string fileName)
+        {
+            if (IsV2ray5(fileName))
+                return "run -c \"" + Utils.GetPath(v2rayConfigRes) + "\"";
+            return "-config \"" + Utils.GetPath(v2rayConfigRes) + "\"";
+        }
+
+        private string GetStdinArguments(string fileName)
+        {
+            return IsV2ray5(fileName) ? "run -c stdin:" : "-config stdin:";
+        }
+
         private void V2rayStart()
         {
             ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
-
             try
             {
                 string fileName = V2rayFindexe();
                 if (fileName == "") return;
 
-                Process p = new Process
+                StringBuilder errorText = new StringBuilder();
+                Process p = new Process();
+                p.StartInfo = new ProcessStartInfo
                 {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = fileName,
-                        WorkingDirectory = Utils.StartupPath(),
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                        StandardOutputEncoding = Encoding.UTF8
-                    }
+                    FileName = fileName,
+                    Arguments = GetConfigArguments(fileName),
+                    WorkingDirectory = Utils.StartupPath(),
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8
                 };
-                p.OutputDataReceived += new DataReceivedEventHandler((sender, e) =>
+                p.OutputDataReceived += (sender, e) =>
                 {
                     if (!String.IsNullOrEmpty(e.Data))
-                    {
-                        string msg = e.Data + Environment.NewLine;
-                        ShowMsg(false, msg);
-                    }
-                });
+                        ShowMsg(false, e.Data + Environment.NewLine);
+                };
+                p.ErrorDataReceived += (sender, e) =>
+                {
+                    if (!String.IsNullOrEmpty(e.Data))
+                        lock (errorText) errorText.AppendLine(e.Data);
+                };
+
                 p.Start();
                 p.PriorityClass = ProcessPriorityClass.High;
                 p.BeginOutputReadLine();
-                //processId = p.Id;
-                _process = p;
+                p.BeginErrorReadLine();
 
-                if (p.WaitForExit(1000))
+                if (p.WaitForExit(1500))
                 {
-                    throw new Exception(p.StandardError.ReadToEnd());
+                    p.WaitForExit();
+                    string error;
+                    lock (errorText) error = errorText.ToString();
+                    throw new Exception("V2Ray core exited during startup. " + error);
                 }
 
+                _process = p;
                 Global.processJob.AddProcess(p.Handle);
+                ShowMsg(false, "V2Ray core started. PID=" + p.Id);
             }
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                string msg = ex.Message;
-                ShowMsg(true, msg);
+                ShowMsg(true, ex.Message);
             }
         }
-        /// <summary>
-        /// V2ray启动，新建进程，传入配置字符串
-        /// </summary>
+
         private int V2rayStartNew(string configStr)
         {
             ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
-
             try
             {
                 string fileName = V2rayFindexe();
                 if (fileName == "") return -1;
 
-                Process p = new Process
+                StringBuilder errorText = new StringBuilder();
+                Process p = new Process();
+                p.StartInfo = new ProcessStartInfo
                 {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = fileName,
-                        Arguments = "-config stdin:",
-                        WorkingDirectory = Utils.StartupPath(),
-                        UseShellExecute = false,
-                        RedirectStandardInput = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                        StandardOutputEncoding = Encoding.UTF8
-                    }
+                    FileName = fileName,
+                    Arguments = GetStdinArguments(fileName),
+                    WorkingDirectory = Utils.StartupPath(),
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8
                 };
-                p.OutputDataReceived += new DataReceivedEventHandler((sender, e) =>
+                p.OutputDataReceived += (sender, e) =>
                 {
                     if (!String.IsNullOrEmpty(e.Data))
-                    {
-                        string msg = e.Data + Environment.NewLine;
-                        ShowMsg(false, msg);
-                    }
-                });
+                        ShowMsg(false, e.Data + Environment.NewLine);
+                };
+                p.ErrorDataReceived += (sender, e) =>
+                {
+                    if (!String.IsNullOrEmpty(e.Data))
+                        lock (errorText) errorText.AppendLine(e.Data);
+                };
+
                 p.Start();
                 p.BeginOutputReadLine();
-
+                p.BeginErrorReadLine();
                 p.StandardInput.Write(configStr);
                 p.StandardInput.Close();
 
-                if (p.WaitForExit(1000))
+                if (p.WaitForExit(1500))
                 {
-                    throw new Exception(p.StandardError.ReadToEnd());
+                    p.WaitForExit();
+                    string error;
+                    lock (errorText) error = errorText.ToString();
+                    throw new Exception("V2Ray speed-test core exited during startup. " + error);
                 }
 
                 Global.processJob.AddProcess(p.Handle);
@@ -300,17 +293,11 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                string msg = ex.Message;
-                ShowMsg(false, msg);
+                ShowMsg(false, ex.Message);
                 return -1;
             }
         }
 
-        /// <summary>
-        /// 消息委托
-        /// </summary>
-        /// <param name="updateToTrayTooltip">是否更新托盘图标的工具提示</param>
-        /// <param name="msg">输出到日志框</param>
         private void ShowMsg(bool updateToTrayTooltip, string msg)
         {
             ProcessEvent?.Invoke(updateToTrayTooltip, msg);
@@ -320,12 +307,12 @@ namespace v2rayN.Handler
         {
             try
             {
+                if (p == null || p.HasExited) return;
                 p.CloseMainWindow();
-                p.WaitForExit(100);
-                if (!p.HasExited)
+                if (!p.WaitForExit(300))
                 {
                     p.Kill();
-                    p.WaitForExit(100);
+                    p.WaitForExit(1000);
                 }
             }
             catch (Exception ex)
