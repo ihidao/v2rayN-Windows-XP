@@ -226,7 +226,7 @@ namespace v2rayN.Handler
                     probe.OutputDataReceived += (sender, e) =>
                     {
                         if (!String.IsNullOrEmpty(e.Data))
-                            versionText.AppendLine(e.Data);
+                            lock (versionText) versionText.AppendLine(e.Data);
                     };
                     probe.ErrorDataReceived += (sender, e) =>
                     {
@@ -247,7 +247,8 @@ namespace v2rayN.Handler
                     }
                     probe.WaitForExit();
 
-                    string text = versionText.ToString();
+                    string text;
+                    lock (versionText) text = versionText.ToString();
                     return text.IndexOf("V2Ray 5.", StringComparison.OrdinalIgnoreCase) >= 0
                         || text.IndexOf("V2Fly 5.", StringComparison.OrdinalIgnoreCase) >= 0;
                 }
