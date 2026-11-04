@@ -68,7 +68,7 @@ jobs:
           git status --short
           git commit -m "Import official v2rayN 4.20 and retarget .NET Framework 4.0"
           if ($LASTEXITCODE -ne 0) { throw "Git commit failed" }
-          git push origin HEAD:v2rayn_4.20_xp
+          git push --force origin HEAD:v2rayn_4.20_xp
           if ($LASTEXITCODE -ne 0) { throw "Push to v2rayn_4.20_xp failed" }
 
           # Attempt a real .NET Framework 4.0 build on the same Windows runner.
