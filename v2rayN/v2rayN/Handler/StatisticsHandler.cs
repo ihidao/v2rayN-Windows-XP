@@ -94,8 +94,6 @@ namespace v2rayN.Handler
                 item.todayDown = 0;
                 item.totalUp = 0;
                 item.totalDown = 0;
-                if (updateFunc_ != null)
-                    updateFunc_(0, 0, new List<ServerStatItem> { item });
             }
             SaveToFile();
         }
