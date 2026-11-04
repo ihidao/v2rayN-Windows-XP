@@ -196,8 +196,21 @@ namespace v2rayN.Handler
                         string result = Utils.Base64Decode(args.Msg);
                         if (Utils.IsNullOrEmpty(result))
                         {
-                            _updateFunc(false, $"{hashCode}{UIRes.I18N("MsgSubscriptionDecodingFailed")}");
-                            return;
+                            string raw = args.Msg == null ? string.Empty : args.Msg.Trim();
+                            if (raw.StartsWith("vmess://", StringComparison.OrdinalIgnoreCase)
+                                || raw.StartsWith("vless://", StringComparison.OrdinalIgnoreCase)
+                                || raw.StartsWith("trojan://", StringComparison.OrdinalIgnoreCase)
+                                || raw.StartsWith("ss://", StringComparison.OrdinalIgnoreCase)
+                                || raw.StartsWith("socks://", StringComparison.OrdinalIgnoreCase)
+                                || raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result = raw;
+                            }
+                            else
+                            {
+                                _updateFunc(false, $"{hashCode}{UIRes.I18N("MsgSubscriptionDecodingFailed")}");
+                                return;
+                            }
                         }
 
                         ConfigHandler.RemoveServerViaSubid(ref config, id);
