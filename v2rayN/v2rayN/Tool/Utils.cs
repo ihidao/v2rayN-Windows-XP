@@ -705,13 +705,24 @@ namespace v2rayN
 
         public static void SetSecurityProtocol()
         {
-            // .NET 4.0 does not define the TLS 1.1/1.2 enum members.
-            // Numeric values keep newer Windows systems able to negotiate them;
-            // Windows XP will use the protocols supported by its Schannel.
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Ssl3
-                                       | SecurityProtocolType.Tls
-                                       | (SecurityProtocolType)768
-                                       | (SecurityProtocolType)3072;
+            // .NET 4.0 can run on systems whose Schannel does not support TLS 1.2.
+            // Do not combine unsupported protocol flags: on Windows XP that can
+            // throw before the HTTP request is even created.
+            try
+            {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // TLS 1.2
+            }
+            catch
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls; // TLS 1.0
+                }
+                catch
+                {
+                    // Keep the runtime default if this OS rejects explicit settings.
+                }
+            }
             ServicePointManager.DefaultConnectionLimit = 256;
         }
         #endregion
