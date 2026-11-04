@@ -70,7 +70,8 @@ namespace v2rayN.Handler
         {
             if (UpdateCompleted != null)
             {
-                bytesReceived = e.BytesReceived;
+                if (e.BytesReceived > bytesReceived)
+                    bytesReceived = e.BytesReceived;
 
                 if (DownloadTimeout != -1)
                 {
@@ -127,13 +128,20 @@ namespace v2rayN.Handler
         {
             double elapsedSeconds = downloadStopwatch.Elapsed.TotalSeconds;
             if (bytesReceived <= 0 || elapsedSeconds <= 0)
-                return "测速失败：未收到数据";
+                return "测速失败：未收到有效数据";
 
-            double speed = bytesReceived / elapsedSeconds / 1000000.0;
-            if (double.IsNaN(speed) || double.IsInfinity(speed) || speed < 0)
+            // Use decimal MB (1 MB = 1,000,000 bytes). Avoid rounding a
+            // slow but non-zero connection to the misleading value "0.0 MB/s".
+            double speedBytesPerSecond = bytesReceived / elapsedSeconds;
+            if (double.IsNaN(speedBytesPerSecond)
+                || double.IsInfinity(speedBytesPerSecond)
+                || speedBytesPerSecond <= 0)
                 return "测速失败：速度计算异常";
 
-            return string.Format("{0} MB/s", speed.ToString("#0.0"));
+            if (speedBytesPerSecond < 100000)
+                return string.Format("{0} KB/s", (speedBytesPerSecond / 1000.0).ToString("0.0"));
+
+            return string.Format("{0} MB/s", (speedBytesPerSecond / 1000000.0).ToString("0.00"));
         }
 
         /// <summary>
