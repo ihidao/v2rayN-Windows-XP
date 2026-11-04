@@ -30,19 +30,19 @@ namespace v2rayN.Handler
 
             if (actionType == "ping")
             {
-                Task.Run(() => RunPing());
+                Task.Factory.StartNew(() => RunPing());
             }
             if (actionType == "tcping")
             {
-                Task.Run(() => RunTcping());
+                Task.Factory.StartNew(() => RunTcping());
             }
             else if (actionType == "realping")
             {
-                Task.Run(() => RunRealPing());
+                Task.Factory.StartNew(() => RunRealPing());
             }
             else if (actionType == "speedtest")
             {
-                Task.Run(() => RunSpeedTest());
+                Task.Factory.StartNew(() => RunSpeedTest());
             }
         }
 
@@ -116,7 +116,7 @@ namespace v2rayN.Handler
                     {
                         continue;
                     }
-                    tasks.Add(Task.Run(() =>
+                    tasks.Add(Task.Factory.StartNew(() =>
                     {
                         try
                         {
@@ -151,7 +151,7 @@ namespace v2rayN.Handler
             {
                 int httpPort = _config.GetLocalPort(Global.InboundHttp);
 
-                Task<int> t = Task.Run(() =>
+                Task<int> t = Task.Factory.StartNew(() =>
                 {
                     try
                     {
