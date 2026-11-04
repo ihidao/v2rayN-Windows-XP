@@ -83,6 +83,7 @@ namespace v2rayN.Forms
             RestoreUI();
 
             LoadV2ray();
+            statistics?.Run();
 
             HideForm();
 

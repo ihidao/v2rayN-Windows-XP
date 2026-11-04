@@ -29,7 +29,7 @@ namespace v2rayN.Handler
         }
 
         private int progressPercentage = -1;
-        private long totalBytesToReceive = 0;
+        private long bytesReceived = 0;
         private Stopwatch downloadStopwatch = new Stopwatch();
         private int DownloadTimeout = -1;
           
@@ -42,7 +42,7 @@ namespace v2rayN.Handler
                 UpdateCompleted?.Invoke(this, new ResultEventArgs(false, UIRes.I18N("Downloading")));
 
                 progressPercentage = -1;
-                totalBytesToReceive = 0;
+                bytesReceived = 0;
                 downloadStopwatch.Reset();
                 downloadStopwatch.Start();
 
@@ -70,11 +70,7 @@ namespace v2rayN.Handler
         {
             if (UpdateCompleted != null)
             {
-                if (totalBytesToReceive == 0)
-                {
-                    totalBytesToReceive = e.BytesReceived;
-                }
-                totalBytesToReceive = e.BytesReceived;
+                bytesReceived = e.BytesReceived;
 
                 if (DownloadTimeout != -1)
                 {
@@ -100,15 +96,18 @@ namespace v2rayN.Handler
                     if (e.Cancelled)
                     {
                         ((WebClientEx)sender).Dispose();
-                        UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
+                        downloadStopwatch.Stop();
+                        if (bytesReceived <= 0)
+                            UpdateCompleted(this, new ResultEventArgs(false, "测速失败：未收到数据"));
+                        else
+                            UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
                         return;
                     }
 
-                    if (e.Error == null
-                        || Utils.IsNullOrEmpty(e.Error.ToString()))
+                    if (e.Error == null)
                     {
-
-                        UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
+                        downloadStopwatch.Stop();
+                        UpdateCompleted(this, new ResultEventArgs(bytesReceived > 0, GetDownloadSpeed()));
                     }
                     else
                     {
@@ -126,21 +125,15 @@ namespace v2rayN.Handler
 
         private string GetDownloadSpeed()
         {
-            // Use a monotonic timer: DateTime has coarse resolution and can produce
-            // a zero duration for very fast downloads.
             double elapsedSeconds = downloadStopwatch.Elapsed.TotalSeconds;
-            if (totalBytesToReceive <= 0 || elapsedSeconds <= 0)
-            {
-                return "0.0 M/s".PadLeft(8, ' ');
-            }
+            if (bytesReceived <= 0 || elapsedSeconds <= 0)
+                return "测速失败：未收到数据";
 
-            double speed = totalBytesToReceive / elapsedSeconds / 1000000.0;
+            double speed = bytesReceived / elapsedSeconds / 1000000.0;
             if (double.IsNaN(speed) || double.IsInfinity(speed) || speed < 0)
-            {
-                speed = 0;
-            }
+                return "测速失败：速度计算异常";
 
-            return string.Format("{0} M/s", speed.ToString("#0.0")).PadLeft(8, ' ');
+            return string.Format("{0} MB/s", speed.ToString("#0.0"));
         }
 
         /// <summary>

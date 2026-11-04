@@ -183,13 +183,10 @@ namespace v2rayN.Handler
 
         private void RunSpeedTest()
         {
-            int testCounter = 0;
             int pid = -1;
 
-            if (_config.vmess.Count <= 0)
-            {
+            if (_config.vmess.Count <= 0 || _selecteds == null || _selecteds.Count == 0)
                 return;
-            }
 
             pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds);
             if (pid < 0)
@@ -199,49 +196,49 @@ namespace v2rayN.Handler
             }
 
             string url = _config.speedTestUrl;
-            DownloadHandle downloadHandle2 = new DownloadHandle();
-            downloadHandle2.UpdateCompleted += (sender2, args) =>
+            const int timeout = 10;
+            try
             {
-                _updateFunc(testCounter, args.Msg);
-            };
-            downloadHandle2.Error += (sender2, args) =>
-            {
-                _updateFunc(testCounter, args.GetException().Message);
-            };
-
-            var timeout = 10;
-            foreach (int itemIndex in _selecteds)
-            {
-                if (itemIndex >= _config.vmess.Count)
+                foreach (int itemIndex in _selecteds)
                 {
-                    break;
+                    if (itemIndex >= _config.vmess.Count)
+                        break;
+                    if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
+                        continue;
+
+                    int httpPort = _config.GetLocalPort("speedtest");
+                    int localTestPort = httpPort + itemIndex;
+                    if (localTestPort <= 0 || !WaitForLocalPort(localTestPort, 5000))
+                    {
+                        _updateFunc(itemIndex, "本地代理端口未监听: " + localTestPort);
+                        continue;
+                    }
+
+                    WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
+                    DownloadHandle downloadHandle = new DownloadHandle();
+                    downloadHandle.UpdateCompleted += (sender, args) =>
+                    {
+                        _updateFunc(itemIndex, args.Msg);
+                    };
+                    downloadHandle.Error += (sender, args) =>
+                    {
+                        Exception error = args.GetException();
+                        _updateFunc(itemIndex, "测速失败: " + (error == null ? "未知错误" : error.Message));
+                    };
+
+                    WebClientEx ws = downloadHandle.DownloadFileAsync(url, webProxy, timeout - 2);
+                    Thread.Sleep(1000 * timeout);
+                    if (ws != null)
+                        ws.CancelAsync();
+                    Thread.Sleep(1000 * 2);
                 }
-
-                if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
-                {
-                    continue;
-                }
-                testCounter = itemIndex;
-                int httpPort = _config.GetLocalPort("speedtest");
-                int localTestPort = httpPort + itemIndex;
-                if (localTestPort <= 0 || !WaitForLocalPort(localTestPort, 5000))
-                {
-                    _updateFunc(itemIndex, "Local proxy port not listening: " + localTestPort);
-                    continue;
-                }
-
-                WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
-                var ws = downloadHandle2.DownloadFileAsync(url, webProxy, timeout - 2);
-
-                Thread.Sleep(1000 * timeout);
-
-                ws.CancelAsync();
-
-                Thread.Sleep(1000 * 2);
             }
-            if (pid > 0) _v2rayHandler.V2rayStopPid(pid);
+            finally
+            {
+                if (pid > 0)
+                    _v2rayHandler.V2rayStopPid(pid);
+            }
         }
-
 
         private bool WaitForLocalPort(int port, int timeoutMilliseconds)
         {
