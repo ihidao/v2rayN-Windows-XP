@@ -28,6 +28,8 @@ jobs:
           git -C $source checkout 2fc3e846df4a86db4f92f8a4899c74c825d4153f
           if ($LASTEXITCODE -ne 0) { throw "Failed to pin official v2rayN 4.20 commit" }
 
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout -B v2rayn_4.20_xp origin/main
           if ($LASTEXITCODE -ne 0) { throw "Failed to checkout destination branch" }
