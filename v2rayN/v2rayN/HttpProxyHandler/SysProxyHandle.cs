@@ -119,7 +119,9 @@ namespace v2rayN.HttpProxyHandler
         {
             if (global)
             {
-                string bypass = String.IsNullOrEmpty(strExceptions) ? Global.IEProxyExceptions : strExceptions;
+                string bypass = String.IsNullOrEmpty(strExceptions)
+                    ? Global.IEProxyExceptions
+                    : Global.IEProxyExceptions + ";" + strExceptions;
                 ApplyGlobalProxy(strProxy, bypass);
             }
             else
