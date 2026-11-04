@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace v2rayN.Forms
 {
@@ -21,6 +22,8 @@ namespace v2rayN.Forms
         private List<int> lvSelecteds = new List<int>();
         private StatisticsHandler statistics = null;
         private string MsgFilter = string.Empty;
+        private volatile bool startupExiting;
+        private readonly ManualResetEvent startupDone = new ManualResetEvent(true);
 
         #region Window 事件
 
@@ -82,9 +85,7 @@ namespace v2rayN.Forms
             RefreshRoutingsMenu();
             RestoreUI();
 
-            LoadV2ray();
-            statistics?.Run();
-
+            StartInitialV2ray();
             HideForm();
 
         }
@@ -124,6 +125,8 @@ namespace v2rayN.Forms
         {
             try
             {
+                startupExiting = true;
+                startupDone.WaitOne(5000, false);
                 v2rayHandler.V2rayStop();
 
                 //HttpProxyHandle.CloseHttpAgent(config);
@@ -401,6 +404,59 @@ namespace v2rayN.Forms
         #endregion
 
         #region v2ray 操作
+
+        /// <summary>
+        /// 首次启动放到线程池执行，避免内核启动检查阻塞主窗体消息循环。
+        /// </summary>
+        private void StartInitialV2ray()
+        {
+            tsbReload.Enabled = false;
+            startupExiting = false;
+            startupDone.Reset();
+
+            if (Global.reloadV2ray)
+            {
+                ClearMsg();
+            }
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    if (!startupExiting)
+                    {
+                        v2rayHandler.LoadV2ray(config);
+                        Global.reloadV2ray = false;
+                        ConfigHandler.SaveConfig(ref config, false);
+                        statistics?.SaveToFile();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Utils.SaveLog("Initial core startup failed: " + ex.Message, ex);
+                    v2rayHandler_ProcessEvent(false, ex.Message);
+                }
+                finally
+                {
+                    startupDone.Set();
+                    try
+                    {
+                        if (!startupExiting && !IsDisposed && IsHandleCreated)
+                        {
+                            BeginInvoke((MethodInvoker)delegate
+                            {
+                                if (startupExiting || IsDisposed) return;
+                                ChangePACButtonStatus(config.sysProxyType);
+                                tsbReload.Enabled = true;
+                                // 统计线程延迟到核心启动流程结束后再运行。
+                                statistics?.Run();
+                            });
+                        }
+                    }
+                    catch { }
+                }
+            });
+        }
 
         /// <summary>
         /// 载入V2ray
