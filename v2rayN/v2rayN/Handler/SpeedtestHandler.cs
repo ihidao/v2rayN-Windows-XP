@@ -101,7 +101,8 @@ namespace v2rayN.Handler
             {
                 string msg = string.Empty;
 
-                pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds);
+                Dictionary<int, int> speedTestPorts;
+                pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
                 if (pid < 0)
                 {
                     _updateFunc(_selecteds[0], UIRes.I18N("OperationFailed"));
@@ -109,7 +110,6 @@ namespace v2rayN.Handler
                 }
 
                 //Thread.Sleep(5000);
-                int httpPort = _config.GetLocalPort("speedtest");
                 List<Task> tasks = new List<Task>();
                 foreach (int itemIndex in _selecteds)
                 {
@@ -121,7 +121,13 @@ namespace v2rayN.Handler
                     {
                         try
                         {
-                            WebProxy webProxy = new WebProxy(Global.Loopback, httpPort + itemIndex);
+                            int localTestPort;
+                            if (!speedTestPorts.TryGetValue(itemIndex, out localTestPort))
+                            {
+                                _updateFunc(itemIndex, "测速端口分配失败");
+                                return;
+                            }
+                            WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
                             int responseTime = -1;
                             string status = GetRealPingTime(_config.speedPingTestUrl, webProxy, out responseTime);
                             string output = Utils.IsNullOrEmpty(status) ? FormatOut(responseTime, "ms") : FormatOut(status, "");
@@ -189,7 +195,8 @@ namespace v2rayN.Handler
             if (_config.vmess.Count <= 0 || _selecteds == null || _selecteds.Count == 0)
                 return;
 
-            pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds);
+            Dictionary<int, int> speedTestPorts;
+            pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
             if (pid < 0)
             {
                 _updateFunc(_selecteds[0], UIRes.I18N("OperationFailed"));
@@ -207,8 +214,12 @@ namespace v2rayN.Handler
                     if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
                         continue;
 
-                    int httpPort = _config.GetLocalPort("speedtest");
-                    int localTestPort = httpPort + itemIndex;
+                    int localTestPort;
+                    if (!speedTestPorts.TryGetValue(itemIndex, out localTestPort))
+                    {
+                        _updateFunc(itemIndex, "测速端口分配失败");
+                        continue;
+                    }
                     if (localTestPort <= 0 || !WaitForLocalPort(localTestPort, 5000))
                     {
                         _updateFunc(itemIndex, "本地代理端口未监听: " + localTestPort);

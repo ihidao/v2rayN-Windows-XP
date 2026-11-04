@@ -1365,7 +1365,8 @@ namespace v2rayN.Handler
         #region Gen speedtest config
 
 
-        public static string GenerateClientSpeedtestConfigString(Config config, List<int> selecteds, out string msg)
+        public static string GenerateClientSpeedtestConfigString(Config config, List<int> selecteds,
+            Dictionary<int, int> speedTestPorts, out string msg)
         {
             try
             {
@@ -1403,7 +1404,6 @@ namespace v2rayN.Handler
 
                 v2rayConfig.inbounds.Clear(); // Remove "proxy" service for speedtest, avoiding port conflicts.
 
-                int httpPort = configCopy.GetLocalPort("speedtest");
                 foreach (int index in selecteds)
                 {
                     if (configCopy.vmess[index].configType == (int)EConfigType.Custom)
@@ -1411,12 +1411,20 @@ namespace v2rayN.Handler
                         continue;
                     }
 
+                    int localPort;
+                    if (speedTestPorts == null || !speedTestPorts.TryGetValue(index, out localPort)
+                        || localPort <= 0)
+                    {
+                        msg = "无法分配测速端口";
+                        return "";
+                    }
+
                     configCopy.index = index;
 
                     Inbounds inbound = new Inbounds
                     {
                         listen = Global.Loopback,
-                        port = httpPort + index,
+                        port = localPort,
                         protocol = Global.InboundHttp
                     };
                     inbound.tag = Global.InboundHttp + inbound.port.ToString();

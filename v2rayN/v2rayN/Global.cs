@@ -19,7 +19,7 @@ namespace v2rayN
         /// <summary>
         /// SpeedTestUrl
         /// </summary>
-        public const string SpeedTestUrl = @"http://cachefly.cachefly.net/10mb.test";
+        public const string SpeedTestUrl = @"https://speed.cloudflare.com/__down?bytes=10000000";
         public const string SpeedPingTestUrl = @"https://www.google.com/generate_204";
         public const string AvailabilityTestUrl = @"https://www.google.com/generate_204";
 

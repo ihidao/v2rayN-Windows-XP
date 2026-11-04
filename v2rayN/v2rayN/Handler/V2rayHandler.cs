@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using v2rayN.Mode;
 
@@ -50,17 +52,60 @@ namespace v2rayN.Handler
             }
         }
 
-        public int LoadV2rayConfigString(Config config, List<int> selecteds)
+        public int LoadV2rayConfigString(Config config, List<int> selecteds,
+            out Dictionary<int, int> speedTestPorts)
         {
-            string msg;
-            string configStr = V2rayConfigHandler.GenerateClientSpeedtestConfigString(config, selecteds, out msg);
-            if (configStr == "")
+            speedTestPorts = new Dictionary<int, int>();
+
+            try
             {
+                // Ask Windows for currently unused ephemeral ports instead of
+                // deriving fixed ports from the SOCKS port (which can collide).
+                foreach (int index in selecteds)
+                {
+                    if (index < 0 || index >= config.vmess.Count
+                        || config.vmess[index].configType == (int)EConfigType.Custom)
+                        continue;
+
+                    int port = GetAvailablePort();
+                    while (speedTestPorts.ContainsValue(port))
+                        port = GetAvailablePort();
+
+                    speedTestPorts[index] = port;
+                }
+
+                string msg;
+                string configStr = V2rayConfigHandler.GenerateClientSpeedtestConfigString(
+                    config, selecteds, speedTestPorts, out msg);
+                if (configStr == "")
+                {
+                    ShowMsg(false, msg);
+                    return -1;
+                }
+
                 ShowMsg(false, msg);
+                return V2rayStartNew(configStr);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to allocate speed-test ports: " + ex.Message, ex);
+                ShowMsg(false, "无法分配测速端口: " + ex.Message);
                 return -1;
             }
-            ShowMsg(false, msg);
-            return V2rayStartNew(configStr);
+        }
+
+        private int GetAvailablePort()
+        {
+            TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+            try
+            {
+                listener.Start();
+                return ((IPEndPoint)listener.LocalEndpoint).Port;
+            }
+            finally
+            {
+                listener.Stop();
+            }
         }
 
         private void V2rayRestart()
