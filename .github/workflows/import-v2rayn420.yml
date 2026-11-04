@@ -1,0 +1,99 @@
+name: Import official v2rayN 4.20 source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/import-v2rayn420.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout destination repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import official v2rayN 4.20
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Join-Path $env:RUNNER_TEMP "v2rayN-4.20"
+          git clone --depth 1 --branch 4.20 https://github.com/2dust/v2rayN.git $source
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clone official v2rayN tag 4.20" }
+
+          git -C $source checkout 2fc3e846df4a86db4f92f8a4899c74c825d4153f
+          if ($LASTEXITCODE -ne 0) { throw "Failed to pin official v2rayN 4.20 commit" }
+
+          git fetch origin main
+          git checkout -B v2rayn_4.20_xp origin/main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to checkout destination branch" }
+
+          git rm -r -f --ignore-unmatch .
+          Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
+            if ($_.Name -ne ".git" -and $_.Name -notmatch '^v2ray-core($|[-_])') {
+              Copy-Item -LiteralPath $_.FullName -Destination (Get-Location).Path -Recurse -Force
+            }
+          }
+
+          # Remove IDE-local files; retain source, resources and updater project.
+          Get-ChildItem -Path . -Recurse -Force -File |
+            Where-Object { $_.Name -like "*.suo" -or $_.Name -like "*.csproj.user" } |
+            Remove-Item -Force
+
+          # Retarget both legacy WinForms projects and their runtime configuration to .NET Framework 4.0.
+          $projects = @(
+            "v2rayN/v2rayN/v2rayN.csproj",
+            "v2rayN/v2rayUpgrade/v2rayUpgrade.csproj"
+          )
+          foreach ($project in $projects) {
+            $raw = [System.IO.File]::ReadAllText((Resolve-Path $project))
+            $raw = $raw -replace '<TargetFrameworkVersion>v4\.6</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.0</TargetFrameworkVersion>'
+            [System.IO.File]::WriteAllText((Resolve-Path $project), $raw, (New-Object System.Text.UTF8Encoding($false)))
+          }
+          foreach ($config in @("v2rayN/v2rayN/app.config", "v2rayN/v2rayUpgrade/App.config")) {
+            $raw = [System.IO.File]::ReadAllText((Resolve-Path $config))
+            $raw = $raw -replace 'Version=v4\.6', 'Version=v4.0'
+            [System.IO.File]::WriteAllText((Resolve-Path $config), $raw, (New-Object System.Text.UTF8Encoding($false)))
+          }
+
+          # Add a build workflow to the imported branch so the .NET 4.0 port can be checked independently.
+          New-Item -ItemType Directory -Force -Path ".github/workflows" | Out-Null
+          @'
+          name: Build v2rayN 4.20 XP (.NET 4.0)
+          on:
+            push:
+              branches:
+                - v2rayn_4.20_xp
+            workflow_dispatch:
+          permissions:
+            contents: read
+          jobs:
+            build:
+              runs-on: windows-2022
+              steps:
+                - uses: actions/checkout@v4
+                - uses: microsoft/setup-msbuild@v2
+                - name: Install .NET Framework 4.0 reference assemblies
+                  shell: pwsh
+                  run: |
+                    nuget install Microsoft.NETFramework.ReferenceAssemblies.net40 -Version 1.0.3 -OutputDirectory packages
+                    if ($LASTEXITCODE -ne 0) { throw "Could not install .NET Framework 4.0 reference assemblies" }
+                - name: Build solution
+                  shell: pwsh
+                  run: |
+                    $refs = (Resolve-Path "packages/Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3/build/.NETFramework/v4.0").Path
+                    msbuild "v2rayN/v2rayN.sln" /m /p:Configuration=Release /p:Platform="Any CPU" /p:TargetFrameworkRootPath="$refs/.."
+          '@ | Set-Content -LiteralPath ".github/workflows/build-v2rayn420-net40.yml" -Encoding utf8
+
+          git add -A
+          git status --short
+          git commit -m "Import official v2rayN 4.20 and retarget .NET Framework 4.0"
+          if ($LASTEXITCODE -ne 0) { throw "Git commit failed" }
+          git push origin HEAD:v2rayn_4.20_xp
+          if ($LASTEXITCODE -ne 0) { throw "Push to v2rayn_4.20_xp failed" }
