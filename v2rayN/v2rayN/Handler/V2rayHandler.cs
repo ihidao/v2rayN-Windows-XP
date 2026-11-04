@@ -179,9 +179,13 @@ namespace v2rayN.Handler
             return "-config \"" + Utils.GetPath(v2rayConfigRes) + "\"";
         }
 
-        private string GetStdinArguments(string fileName)
+        // Speed-test configurations are written to a temporary file.
+        // V2Ray 5.18 on Windows treats "stdin:" as a literal filename.
+        private string GetConfigStringArguments(string fileName, string configFile)
         {
-            return IsV2ray5(fileName) ? "run -c stdin:" : "-config stdin:";
+            if (IsV2ray5(fileName))
+                return "run -c \"" + configFile + "\"";
+            return "-config \"" + configFile + "\"";
         }
 
         private void V2rayStart()
@@ -243,20 +247,25 @@ namespace v2rayN.Handler
         private int V2rayStartNew(string configStr)
         {
             ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
+            string tempConfigFile = null;
+            Process p = null;
             try
             {
                 string fileName = V2rayFindexe();
                 if (fileName == "") return -1;
 
+                tempConfigFile = Path.Combine(Path.GetTempPath(),
+                    "v2rayN-speedtest-" + Guid.NewGuid().ToString("N") + ".json");
+                File.WriteAllText(tempConfigFile, configStr, new UTF8Encoding(false));
+
                 StringBuilder errorText = new StringBuilder();
-                Process p = new Process();
+                p = new Process();
                 p.StartInfo = new ProcessStartInfo
                 {
                     FileName = fileName,
-                    Arguments = GetStdinArguments(fileName),
+                    Arguments = GetConfigStringArguments(fileName, tempConfigFile),
                     WorkingDirectory = Utils.StartupPath(),
                     UseShellExecute = false,
-                    RedirectStandardInput = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
@@ -276,8 +285,6 @@ namespace v2rayN.Handler
                 p.Start();
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
-                p.StandardInput.Write(configStr);
-                p.StandardInput.Close();
 
                 if (p.WaitForExit(1500))
                 {
@@ -287,11 +294,24 @@ namespace v2rayN.Handler
                     throw new Exception("V2Ray speed-test core exited during startup. " + error);
                 }
 
+                // The core has loaded its configuration; the temporary file is no longer needed.
+                try { File.Delete(tempConfigFile); } catch { }
+                tempConfigFile = null;
+
                 Global.processJob.AddProcess(p.Handle);
                 return p.Id;
             }
             catch (Exception ex)
             {
+                if (p != null)
+                {
+                    try { if (!p.HasExited) p.Kill(); } catch { }
+                    try { p.Dispose(); } catch { }
+                }
+                if (!String.IsNullOrEmpty(tempConfigFile))
+                {
+                    try { File.Delete(tempConfigFile); } catch { }
+                }
                 Utils.SaveLog(ex.Message, ex);
                 ShowMsg(false, ex.Message);
                 return -1;
