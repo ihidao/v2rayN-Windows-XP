@@ -99,9 +99,7 @@ namespace v2rayN.Handler
                     if (e.Cancelled)
                     {
                         ((WebClientEx)sender).Dispose();
-                        TimeSpan ts = (DateTime.Now - totalDatetime);
-                        string speed = string.Format("{0} M/s", (totalBytesToReceive / ts.TotalMilliseconds / 1000).ToString("#0.0"));
-                        UpdateCompleted(this, new ResultEventArgs(true, speed.PadLeft(8, ' ')));
+                        UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
                         return;
                     }
 
@@ -109,9 +107,7 @@ namespace v2rayN.Handler
                         || Utils.IsNullOrEmpty(e.Error.ToString()))
                     {
 
-                        TimeSpan ts = (DateTime.Now - totalDatetime);
-                        string speed = string.Format("{0} M/s", (totalBytesToReceive / ts.TotalMilliseconds / 1000).ToString("#0.0"));
-                        UpdateCompleted(this, new ResultEventArgs(true, speed.PadLeft(8, ' ')));
+                        UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
                     }
                     else
                     {
@@ -125,6 +121,25 @@ namespace v2rayN.Handler
 
                 Error?.Invoke(this, new ErrorEventArgs(ex));
             }
+        }
+
+        private string GetDownloadSpeed()
+        {
+            // A very fast/failed download can complete before the timer advances.
+            // Avoid division by zero, NaN and Infinity in the server list.
+            double elapsedMilliseconds = (DateTime.Now - totalDatetime).TotalMilliseconds;
+            if (totalBytesToReceive <= 0 || elapsedMilliseconds <= 0)
+            {
+                return "0.0 M/s".PadLeft(8, ' ');
+            }
+
+            double speed = totalBytesToReceive / elapsedMilliseconds / 1000.0;
+            if (double.IsNaN(speed) || double.IsInfinity(speed) || speed < 0)
+            {
+                speed = 0;
+            }
+
+            return string.Format("{0} M/s", speed.ToString("#0.0")).PadLeft(8, ' ');
         }
 
         /// <summary>
