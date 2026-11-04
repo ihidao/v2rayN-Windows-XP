@@ -150,6 +150,11 @@ namespace v2rayN.Handler
             try
             {
                 int httpPort = _config.GetLocalPort(Global.InboundHttp);
+                if (httpPort <= 0 || !WaitForLocalPort(httpPort, 2500))
+                {
+                    Utils.SaveLog("Local HTTP inbound is not listening on 127.0.0.1:" + httpPort);
+                    return -1;
+                }
 
                 Task<int> t = Task.Factory.StartNew(() =>
                 {
@@ -218,8 +223,14 @@ namespace v2rayN.Handler
                 }
                 testCounter = itemIndex;
                 int httpPort = _config.GetLocalPort("speedtest");
+                int localTestPort = httpPort + itemIndex;
+                if (localTestPort <= 0 || !WaitForLocalPort(localTestPort, 5000))
+                {
+                    _updateFunc(itemIndex, "Local proxy port not listening: " + localTestPort);
+                    continue;
+                }
 
-                WebProxy webProxy = new WebProxy(Global.Loopback, httpPort + itemIndex);
+                WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
                 var ws = downloadHandle2.DownloadFileAsync(url, webProxy, timeout - 2);
 
                 Thread.Sleep(1000 * timeout);
@@ -231,6 +242,32 @@ namespace v2rayN.Handler
             if (pid > 0) _v2rayHandler.V2rayStopPid(pid);
         }
 
+
+        private bool WaitForLocalPort(int port, int timeoutMilliseconds)
+        {
+            Stopwatch timer = Stopwatch.StartNew();
+            while (timer.ElapsedMilliseconds < timeoutMilliseconds)
+            {
+                try
+                {
+                    using (TcpClient client = new TcpClient())
+                    {
+                        IAsyncResult result = client.BeginConnect(Global.Loopback, port, null, null);
+                        bool connected = result.AsyncWaitHandle.WaitOne(200);
+                        if (connected)
+                        {
+                            client.EndConnect(result);
+                            return true;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+                Thread.Sleep(100);
+            }
+            return false;
+        }
 
         private int GetTcpingTime(string url, int port)
         {
@@ -256,7 +293,7 @@ namespace v2rayN.Handler
                 clientSocket.EndConnect(result);
 
                 timer.Stop();
-                responseTime = timer.Elapsed.Milliseconds;
+                responseTime = (int)timer.Elapsed.TotalMilliseconds;
                 clientSocket.Close();
             }
             catch (Exception ex)
