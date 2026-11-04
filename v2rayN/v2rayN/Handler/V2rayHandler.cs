@@ -18,6 +18,7 @@ namespace v2rayN.Handler
         private string coreUrl;
         public event ProcessDelegate ProcessEvent;
         private Process _process;
+        private List<int> readinessPorts = new List<int>();
 
         public V2rayHandler()
         {
@@ -25,6 +26,16 @@ namespace v2rayN.Handler
 
         public void LoadV2ray(Config config)
         {
+            readinessPorts = new List<int>();
+            if (config.inbound != null)
+            {
+                foreach (var inbound in config.inbound)
+                {
+                    if (inbound != null && inbound.localPort > 0 && !readinessPorts.Contains(inbound.localPort))
+                        readinessPorts.Add(inbound.localPort);
+                }
+            }
+
             if (config.coreType == ECoreType.v2fly_core)
             {
                 lstV2ray = new List<string> { "wv2ray", "v2ray" };
@@ -84,7 +95,7 @@ namespace v2rayN.Handler
                 }
 
                 ShowMsg(false, msg);
-                return V2rayStartNew(configStr);
+                return V2rayStartNew(configStr, new List<int>(speedTestPorts.Values));
             }
             catch (Exception ex)
             {
@@ -186,7 +197,7 @@ namespace v2rayN.Handler
         // Cache the result so reloads and speed tests do not spawn extra probe processes.
         // Try the V2Ray 5.x command line first, then fall back to the 4.x syntax.
         // A process that remains alive for the startup check is considered started.
-        private Process TryStartCore(string fileName, string arguments, out string failure)
+        private Process TryStartCore(string fileName, string arguments, List<int> ports, out string failure)
         {
             failure = string.Empty;
             Process p = new Process();
@@ -221,7 +232,16 @@ namespace v2rayN.Handler
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
-                if (!p.WaitForExit(1500))
+                // 每 100ms 检查一次：核心监听端口一旦就绪便立即返回，
+                // 不再无条件等待完整的 1.5 秒；无端口信息时保留原超时保护。
+                for (int elapsed = 0; elapsed < 1500; elapsed += 100)
+                {
+                    if (p.HasExited) break;
+                    if (IsAnyPortReady(ports)) return p;
+                    if (p.WaitForExit(100)) break;
+                }
+
+                if (!p.HasExited)
                     return p;
 
                 p.WaitForExit();
@@ -240,10 +260,28 @@ namespace v2rayN.Handler
             }
         }
 
-        private Process StartCoreWithFallback(string fileName, string configFile, out string failure)
+        private bool IsAnyPortReady(List<int> ports)
+        {
+            if (ports == null || ports.Count == 0) return false;
+            foreach (int port in ports)
+            {
+                try
+                {
+                    using (TcpClient client = new TcpClient())
+                    {
+                        client.Connect(IPAddress.Loopback, port);
+                        return true;
+                    }
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports, out string failure)
         {
             string error5;
-            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"",
+            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports,
                 out error5);
             if (p != null)
             {
@@ -255,7 +293,7 @@ namespace v2rayN.Handler
                 + error5 + Environment.NewLine);
 
             string error4;
-            p = TryStartCore(fileName, "-config \"" + configFile + "\"",
+            p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports,
                 out error4);
             if (p != null)
             {
@@ -280,7 +318,7 @@ namespace v2rayN.Handler
 
                 string failure;
                 Process p = StartCoreWithFallback(fileName,
-                    Utils.GetPath(v2rayConfigRes), out failure);
+                    Utils.GetPath(v2rayConfigRes), readinessPorts, out failure);
                 if (p == null)
                     throw new Exception(failure);
 
@@ -296,7 +334,7 @@ namespace v2rayN.Handler
             }
         }
 
-        private int V2rayStartNew(string configStr)
+        private int V2rayStartNew(string configStr, List<int> ports)
         {
             ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
             string tempConfigFile = null;
@@ -311,7 +349,7 @@ namespace v2rayN.Handler
                 File.WriteAllText(tempConfigFile, configStr, new UTF8Encoding(false));
 
                 string failure;
-                p = StartCoreWithFallback(fileName, tempConfigFile, out failure);
+                p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure);
                 if (p == null)
                     throw new Exception("V2Ray speed-test core failed to start. " + failure);
 
