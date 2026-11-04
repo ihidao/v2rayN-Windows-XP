@@ -17,6 +17,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: microsoft/setup-msbuild@v2
+
       - name: Import official v2rayN 4.20
         shell: pwsh
         run: |
