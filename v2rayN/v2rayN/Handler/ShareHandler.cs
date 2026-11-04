@@ -398,7 +398,7 @@ namespace v2rayN.Handler
                     vmessItem.configType = (int)EConfigType.Trojan;
 
                     Uri uri = new Uri(result);
-                    vmessItem.address = uri.IdnHost;
+                    vmessItem.address = uri.DnsSafeHost;
                     vmessItem.port = uri.Port;
                     vmessItem.id = uri.UserInfo;
 
@@ -490,7 +490,7 @@ namespace v2rayN.Handler
             VmessItem server = new VmessItem
             {
                 remarks = parsedUrl.GetComponents(UriComponents.Fragment, UriFormat.Unescaped),
-                address = parsedUrl.IdnHost,
+                address = parsedUrl.DnsSafeHost,
                 port = parsedUrl.Port,
             };
 
@@ -573,7 +573,7 @@ namespace v2rayN.Handler
 
             Uri u = new Uri(result);
 
-            i.address = u.IdnHost;
+            i.address = u.DnsSafeHost;
             i.port = u.Port;
             i.remarks = u.GetComponents(UriComponents.Fragment, UriFormat.Unescaped);
             var q = HttpUtility.ParseQueryString(u.Query);
@@ -659,7 +659,7 @@ namespace v2rayN.Handler
 
             Uri url = new Uri(result);
 
-            item.address = url.IdnHost;
+            item.address = url.DnsSafeHost;
             item.port = url.Port;
             item.remarks = url.GetComponents(UriComponents.Fragment, UriFormat.Unescaped);
             item.id = url.UserInfo;
