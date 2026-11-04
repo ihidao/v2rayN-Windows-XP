@@ -2,6 +2,9 @@ name: Build v2rayN 4.20 for XP
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - v2rayn_4.20_xp
 
 permissions:
   contents: read
