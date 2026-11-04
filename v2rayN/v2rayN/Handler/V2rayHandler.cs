@@ -237,7 +237,12 @@ namespace v2rayN.Handler
                 for (int elapsed = 0; elapsed < 1500; elapsed += 100)
                 {
                     if (p.HasExited) break;
-                    if (IsAnyPortReady(ports)) return p;
+                    if (IsAnyPortReady(ports))
+                    {
+                        // 避免把其它程序占用的同一端口误判为本核心已就绪。
+                        if (p.WaitForExit(100)) break;
+                        return p;
+                    }
                     if (p.WaitForExit(100)) break;
                 }
 
