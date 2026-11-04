@@ -1,4 +1,4 @@
-name: Build v2rayN 4.20 XP (.NET Framework 4.0)
+name: Build v2rayN 4.20 for XP (.NET 4.0)
 
 on:
   workflow_dispatch:
