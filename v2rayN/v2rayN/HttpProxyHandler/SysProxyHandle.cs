@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using v2rayN.Tool;
 
 namespace v2rayN.HttpProxyHandler
 {
