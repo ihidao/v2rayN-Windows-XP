@@ -145,6 +145,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
+                Error?.Invoke(this, new ErrorEventArgs(ex));
             }
         }
 
@@ -152,16 +153,17 @@ namespace v2rayN.Handler
         {
             try
             {
-                if (e.Error == null
-                    || Utils.IsNullOrEmpty(e.Error.ToString()))
+                if (e.Cancelled)
                 {
-                    string source = e.Result;
-                    UpdateCompleted?.Invoke(this, new ResultEventArgs(true, source));
+                    throw new WebException("Subscription download was cancelled.");
                 }
-                else
+                if (e.Error != null)
                 {
                     throw e.Error;
                 }
+
+                string source = e.Result;
+                UpdateCompleted?.Invoke(this, new ResultEventArgs(true, source));
             }
             catch (Exception ex)
             {
