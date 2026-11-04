@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using v2rayN.Base;
@@ -29,7 +30,7 @@ namespace v2rayN.Handler
 
         private int progressPercentage = -1;
         private long totalBytesToReceive = 0;
-        private DateTime totalDatetime = new DateTime();
+        private Stopwatch downloadStopwatch = new Stopwatch();
         private int DownloadTimeout = -1;
           
         public WebClientEx DownloadFileAsync(string url, WebProxy webProxy, int downloadTimeout)
@@ -42,6 +43,8 @@ namespace v2rayN.Handler
 
                 progressPercentage = -1;
                 totalBytesToReceive = 0;
+                downloadStopwatch.Reset();
+                downloadStopwatch.Start();
 
                 //WebClientEx ws = new WebClientEx();
                 DownloadTimeout = downloadTimeout;
@@ -69,15 +72,13 @@ namespace v2rayN.Handler
             {
                 if (totalBytesToReceive == 0)
                 {
-                    totalDatetime = DateTime.Now;
                     totalBytesToReceive = e.BytesReceived;
-                    return;
                 }
                 totalBytesToReceive = e.BytesReceived;
 
                 if (DownloadTimeout != -1)
                 {
-                    if ((DateTime.Now - totalDatetime).TotalSeconds > DownloadTimeout)
+                    if (downloadStopwatch.Elapsed.TotalSeconds > DownloadTimeout)
                     {
                         ((WebClientEx)sender).CancelAsync();
                     }
@@ -125,15 +126,15 @@ namespace v2rayN.Handler
 
         private string GetDownloadSpeed()
         {
-            // A very fast/failed download can complete before the timer advances.
-            // Avoid division by zero, NaN and Infinity in the server list.
-            double elapsedMilliseconds = (DateTime.Now - totalDatetime).TotalMilliseconds;
-            if (totalBytesToReceive <= 0 || elapsedMilliseconds <= 0)
+            // Use a monotonic timer: DateTime has coarse resolution and can produce
+            // a zero duration for very fast downloads.
+            double elapsedSeconds = downloadStopwatch.Elapsed.TotalSeconds;
+            if (totalBytesToReceive <= 0 || elapsedSeconds <= 0)
             {
                 return "0.0 M/s".PadLeft(8, ' ');
             }
 
-            double speed = totalBytesToReceive / elapsedMilliseconds / 1000.0;
+            double speed = totalBytesToReceive / elapsedSeconds / 1000000.0;
             if (double.IsNaN(speed) || double.IsInfinity(speed) || speed < 0)
             {
                 speed = 0;

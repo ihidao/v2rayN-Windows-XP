@@ -28,14 +28,14 @@ jobs:
       - name: Restore NuGet packages
         shell: pwsh
         run: |
-          msbuild "v2rayN/v2rayN.sln" /t:Restore /p:RestoreIgnoreFailedSources=true
+          msbuild "v2rayN/v2rayN/v2rayN.csproj" /t:Restore /p:RestoreIgnoreFailedSources=true
           if ($LASTEXITCODE -ne 0) { throw "NuGet restore failed" }
 
       - name: Build .NET Framework 4.0 solution
         shell: pwsh
         run: |
           $frameworkRoot = (Resolve-Path "packages/Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3/build").Path
-          msbuild "v2rayN/v2rayN.sln" /m /p:Configuration=Release /p:Platform="Any CPU" /p:TargetFrameworkRootPath="$frameworkRoot" /v:minimal
+          msbuild "v2rayN/v2rayN/v2rayN.csproj" /m /p:Configuration=Release /p:Platform=AnyCPU /p:TargetFrameworkRootPath="$frameworkRoot" /v:minimal
           if ($LASTEXITCODE -ne 0) { throw ".NET Framework 4.0 build failed" }
 
       - name: Upload GUI build
@@ -44,6 +44,5 @@ jobs:
           name: v2rayN-4.20-XP-net40
           path: |
             v2rayN/v2rayN/bin/Release/**
-            v2rayN/v2rayUpgrade/bin/Release/**
           if-no-files-found: error
           retention-days: 14
