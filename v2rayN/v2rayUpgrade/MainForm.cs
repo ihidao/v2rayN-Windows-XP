@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
+using ICSharpCode.SharpZipLib.Zip;
 using System.Text;
 using System.Windows.Forms;
 
@@ -68,31 +68,44 @@ namespace v2rayUpgrade
                 string startKey = "v2rayN/";
 
 
-                using (ZipArchive archive = ZipFile.OpenRead(fileName))
+                using (ZipFile archive = new ZipFile(fileName))
                 {
-                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    foreach (ZipEntry entry in archive)
                     {
                         try
                         {
-                            if (entry.Length == 0)
-                            {
+                            if (entry.IsDirectory || entry.Size == 0)
                                 continue;
-                            }
-                            string fullName = entry.FullName;
-                            if (fullName.StartsWith(startKey))
+
+                            string fullName = entry.Name.Replace('/', Path.DirectorySeparatorChar);
+                            if (fullName.StartsWith(startKey, StringComparison.OrdinalIgnoreCase))
+                                fullName = fullName.Substring(startKey.Length);
+
+                            string entryOutputPath = GetPath(fullName);
+                            string root = Path.GetFullPath(StartupPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                            string fullOutputPath = Path.GetFullPath(entryOutputPath);
+                            if (!fullOutputPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                                throw new IOException("Invalid ZIP entry path: " + entry.Name);
+
+                            if (string.Equals(Application.ExecutablePath, fullOutputPath, StringComparison.OrdinalIgnoreCase))
                             {
-                                fullName = fullName.Substring(startKey.Length, fullName.Length - startKey.Length);
-                            }
-                            if (Application.ExecutablePath.ToLower() == GetPath(fullName).ToLower())
-                            {
+                                if (File.Exists(thisAppOldFile))
+                                    File.Delete(thisAppOldFile);
                                 File.Move(Application.ExecutablePath, thisAppOldFile);
                             }
 
-                            string entryOuputPath = GetPath(fullName);
+                            string directory = Path.GetDirectoryName(fullOutputPath);
+                            if (!Directory.Exists(directory))
+                                Directory.CreateDirectory(directory);
 
-                            FileInfo fileInfo = new FileInfo(entryOuputPath);
-                            fileInfo.Directory.Create();
-                            entry.ExtractToFile(entryOuputPath, true);
+                            using (Stream input = archive.GetInputStream(entry))
+                            using (FileStream output = File.Create(fullOutputPath))
+                            {
+                                byte[] buffer = new byte[8192];
+                                int count;
+                                while ((count = input.Read(buffer, 0, buffer.Length)) > 0)
+                                    output.Write(buffer, 0, count);
+                            }
                         }
                         catch (Exception ex)
                         {
