@@ -18,6 +18,9 @@ namespace v2rayN.Handler
         private string coreUrl;
         public event ProcessDelegate ProcessEvent;
         private Process _process;
+        private string _detectedCorePath = string.Empty;
+        private bool _detectedCoreIsV2ray5;
+        private bool _coreVersionDetected;
 
         public V2rayHandler()
         {
@@ -35,6 +38,10 @@ namespace v2rayN.Handler
                 lstV2ray = new List<string> { "xray" };
                 coreUrl = Global.xrayCoreUrl;
             }
+
+            // Detect the core version after the main window has been shown,
+            // but before generating configuration and starting the core.
+            DetectCoreVersion();
 
             if (Global.reloadV2ray)
             {
@@ -182,8 +189,24 @@ namespace v2rayN.Handler
             return string.Empty;
         }
 
-        // V2Ray 5.x changed the CLI to "run -c". Older 4.x uses "-config".
-        private bool IsV2ray5(string fileName)
+        // Detect the core CLI once during the first UI startup, before launching it.
+        // Cache the result so reloads and speed tests do not spawn extra probe processes.
+        private void DetectCoreVersion()
+        {
+            string fileName = V2rayFindexe();
+            if (string.IsNullOrEmpty(fileName))
+                return;
+
+            if (_coreVersionDetected
+                && string.Equals(_detectedCorePath, fileName, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _detectedCorePath = fileName;
+            _detectedCoreIsV2ray5 = ProbeV2ray5(fileName);
+            _coreVersionDetected = true;
+        }
+
+        private bool ProbeV2ray5(string fileName)
         {
             try
             {
@@ -196,25 +219,55 @@ namespace v2rayN.Handler
                 info.RedirectStandardOutput = true;
                 info.RedirectStandardError = true;
 
-                using (Process probe = Process.Start(info))
+                StringBuilder versionText = new StringBuilder();
+                using (Process probe = new Process())
                 {
-                    if (probe == null) return false;
-                    string output = probe.StandardOutput.ReadToEnd();
-                    string error = probe.StandardError.ReadToEnd();
+                    probe.StartInfo = info;
+                    probe.OutputDataReceived += (sender, e) =>
+                    {
+                        if (!String.IsNullOrEmpty(e.Data))
+                            versionText.AppendLine(e.Data);
+                    };
+                    probe.ErrorDataReceived += (sender, e) =>
+                    {
+                        if (!String.IsNullOrEmpty(e.Data))
+                            versionText.AppendLine(e.Data);
+                    };
+
+                    if (!probe.Start())
+                        return false;
+
+                    probe.BeginOutputReadLine();
+                    probe.BeginErrorReadLine();
+
                     if (!probe.WaitForExit(3000))
                     {
                         try { probe.Kill(); } catch { }
                         return false;
                     }
-                    string versionText = output + Environment.NewLine + error;
-                    return versionText.IndexOf("V2Ray 5.", StringComparison.OrdinalIgnoreCase) >= 0
-                        || versionText.IndexOf("V2Fly 5.", StringComparison.OrdinalIgnoreCase) >= 0;
+                    probe.WaitForExit();
+
+                    string text = versionText.ToString();
+                    return text.IndexOf("V2Ray 5.", StringComparison.OrdinalIgnoreCase) >= 0
+                        || text.IndexOf("V2Fly 5.", StringComparison.OrdinalIgnoreCase) >= 0;
                 }
             }
             catch
             {
                 return false;
             }
+        }
+
+        private bool IsV2ray5(string fileName)
+        {
+            if (!_coreVersionDetected
+                || !string.Equals(_detectedCorePath, fileName, StringComparison.OrdinalIgnoreCase))
+            {
+                _detectedCorePath = fileName;
+                _detectedCoreIsV2ray5 = ProbeV2ray5(fileName);
+                _coreVersionDetected = true;
+            }
+            return _detectedCoreIsV2ray5;
         }
 
         private string GetConfigArguments(string fileName)
