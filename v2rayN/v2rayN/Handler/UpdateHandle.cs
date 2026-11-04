@@ -2,9 +2,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using v2rayN.Mode;
 
@@ -283,50 +283,59 @@ namespace v2rayN.Handler
 
         #region private
 
-        private async void CheckUpdateAsync(string type)
+        private void CheckUpdateAsync(string type)
         {
-            try
+            SynchronizationContext uiContext = SynchronizationContext.Current;
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                Utils.SetSecurityProtocol();
-                WebRequestHandler webRequestHandler = new WebRequestHandler
+                try
                 {
-                    AllowAutoRedirect = false
-                };
-                HttpClient httpClient = new HttpClient(webRequestHandler);
+                    Utils.SetSecurityProtocol();
+                    string url;
+                    if (type == "v2fly")
+                        url = v2flyCoreLatestUrl;
+                    else if (type == "xray")
+                        url = xrayCoreLatestUrl;
+                    else if (type == "v2rayN")
+                        url = nLatestUrl;
+                    else
+                        throw new ArgumentException("Type");
 
-                string url;
-                if (type == "v2fly")
-                {
-                    url = v2flyCoreLatestUrl;
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                    request.AllowAutoRedirect = false;
+                    request.Method = "GET";
+                    request.Timeout = 15000;
+                    request.ReadWriteTimeout = 15000;
+
+                    string redirectUrl = null;
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    {
+                        int status = (int)response.StatusCode;
+                        if (status >= 300 && status < 400)
+                            redirectUrl = response.Headers[HttpResponseHeader.Location];
+                    }
+
+                    if (!string.IsNullOrEmpty(redirectUrl))
+                    {
+                        if (uiContext != null)
+                            uiContext.Post(delegate { responseHandler(type, redirectUrl); }, null);
+                        else
+                            responseHandler(type, redirectUrl);
+                    }
+                    else
+                    {
+                        Utils.SaveLog("StatusCode error: " + url);
+                    }
                 }
-                else if (type == "xray")
+                catch (Exception ex)
                 {
-                    url = xrayCoreLatestUrl;
+                    Utils.SaveLog(ex.Message, ex);
+                    if (uiContext != null)
+                        uiContext.Post(delegate { _updateFunc(false, ex.Message); }, null);
+                    else
+                        _updateFunc(false, ex.Message);
                 }
-                else if (type == "v2rayN")
-                {
-                    url = nLatestUrl;
-                }
-                else
-                {
-                    throw new ArgumentException("Type");
-                }
-                HttpResponseMessage response = await httpClient.GetAsync(url);
-                if (response.StatusCode.ToString() == "Redirect")
-                {
-                    responseHandler(type, response.Headers.Location.ToString());
-                }
-                else
-                {
-                    Utils.SaveLog("StatusCode error: " + url);
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                Utils.SaveLog(ex.Message, ex);
-                _updateFunc(false, ex.Message);
-            }
+            });
         }
 
         /// <summary>
