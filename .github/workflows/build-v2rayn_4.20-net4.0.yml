@@ -1,9 +1,6 @@
 name: Build v2rayN 4.20 XP (.NET Framework 4.0)
 
 on:
-  push:
-    branches:
-      - v2rayn_4.20_xp
   workflow_dispatch:
 
 permissions:
