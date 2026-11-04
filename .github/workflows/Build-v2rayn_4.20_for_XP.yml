@@ -1,4 +1,4 @@
-name: Build v2rayN 4.20 for XP (.NET 4.0)
+name: Build v2rayN 4.20 for XP
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
       - name: Upload GUI build
         uses: actions/upload-artifact@v4
         with:
-          name: v2rayN-4.20-XP-net40
+          name: v2rayN_4.20_for_XP
           path: |
             v2rayN/v2rayN/bin/Release/**
           if-no-files-found: error
