@@ -1,146 +1,42 @@
-﻿using Grpc.Core;
 using System;
 using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
-using System.Threading.Tasks;
 using v2rayN.Mode;
-using v2rayN.Protos.Statistics;
 
 namespace v2rayN.Handler
 {
+    // .NET Framework 4.0 / Windows XP compatibility:
+    // live gRPC statistics are disabled because the original Grpc.Core
+    // native runtime requires newer Windows/.NET versions. Previously saved
+    // statistics remain readable, clearable and persistent.
     class StatisticsHandler
     {
-        private Mode.Config config_;
         private ServerStatistics serverStatistics_;
-        private Channel channel_;
-        private StatsService.StatsServiceClient client_;
-        private bool exitFlag_;
+        private readonly Action<ulong, ulong, List<ServerStatItem>> updateFunc_;
 
-        Action<ulong, ulong, List<ServerStatItem>> updateFunc_;
-
-        public bool Enable
-        {
-            get; set;
-        }
-
-        public bool UpdateUI
-        {
-            get; set;
-        }
-
+        public bool Enable { get; set; }
+        public bool UpdateUI { get; set; }
 
         public List<ServerStatItem> Statistic
         {
-            get
-            {
-                return serverStatistics_.server;
-            }
+            get { return serverStatistics_.server; }
         }
 
         public StatisticsHandler(Mode.Config config, Action<ulong, ulong, List<ServerStatItem>> update)
         {
-            //try
-            //{
-            //    if (Environment.Is64BitOperatingSystem)
-            //    {
-            //        FileManager.UncompressFile(Utils.GetPath("grpc_csharp_ext.x64.dll"), Resources.grpc_csharp_ext_x64_dll);
-            //    }
-            //    else
-            //    {
-            //        FileManager.UncompressFile(Utils.GetPath("grpc_csharp_ext.x86.dll"), Resources.grpc_csharp_ext_x86_dll);
-            //    }
-            //}
-            //catch (IOException ex)
-            //{
-            //    Utils.SaveLog(ex.Message, ex);
-
-            //}
-
-            config_ = config;
-            Enable = config.enableStatistics;
-            UpdateUI = false;
             updateFunc_ = update;
-            exitFlag_ = false;
-
+            Enable = false;
+            UpdateUI = false;
             LoadFromFile();
-
-            GrpcInit();
-
-            Task.Run(() => Run());
-        }
-
-        private void GrpcInit()
-        {
-            if (channel_ == null)
-            {
-                Global.statePort = GetFreePort();
-
-                channel_ = new Channel($"{Global.Loopback}:{Global.statePort}", ChannelCredentials.Insecure);
-                channel_.ConnectAsync();
-                client_ = new StatsService.StatsServiceClient(channel_);
-            }
         }
 
         public void Close()
         {
-            try
-            {
-                exitFlag_ = true;
-                channel_.ShutdownAsync();
-            }
-            catch (Exception ex)
-            {
-                Utils.SaveLog(ex.Message, ex);
-            }
+            SaveToFile();
         }
 
         public void Run()
         {
-            while (!exitFlag_)
-            {
-                try
-                {
-                    if (Enable && channel_.State == ChannelState.Ready)
-                    {
-                        QueryStatsResponse res = null;
-                        try
-                        {
-                            res = client_.QueryStats(new QueryStatsRequest() { Pattern = "", Reset = true });
-                        }
-                        catch (Exception ex)
-                        {
-                            //Utils.SaveLog(ex.Message, ex);
-                        }
-
-                        if (res != null)
-                        {
-                            string itemId = config_.getItemId();
-                            ServerStatItem serverStatItem = GetServerStatItem(itemId);
-
-                            //TODO: parse output
-                            ParseOutput(res.Stat, out ulong up, out ulong down);
-
-                            serverStatItem.todayUp += up;
-                            serverStatItem.todayDown += down;
-                            serverStatItem.totalUp += up;
-                            serverStatItem.totalDown += down;
-
-                            if (UpdateUI)
-                            {
-                                updateFunc_(up, down, new List<ServerStatItem> { serverStatItem });
-                            }
-                        }
-                    }
-                    Thread.Sleep(config_.statisticsFreshRate);
-                    channel_.ConnectAsync();
-                }
-                catch (Exception ex)
-                {
-                    //Utils.SaveLog(ex.Message, ex);
-                }
-            }
+            // Live traffic collection is intentionally unavailable in the XP build.
         }
 
         public void LoadFromFile()
@@ -149,19 +45,12 @@ namespace v2rayN.Handler
             {
                 string result = Utils.LoadResource(Utils.GetPath(Global.StatisticLogOverall));
                 if (!Utils.IsNullOrEmpty(result))
-                {
-                    //转成Json
                     serverStatistics_ = Utils.FromJson<ServerStatistics>(result);
-                }
 
                 if (serverStatistics_ == null)
-                {
                     serverStatistics_ = new ServerStatistics();
-                }
                 if (serverStatistics_.server == null)
-                {
                     serverStatistics_.server = new List<ServerStatItem>();
-                }
 
                 long ticks = DateTime.Now.Date.Ticks;
                 foreach (ServerStatItem item in serverStatistics_.server)
@@ -177,6 +66,8 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
+                serverStatistics_ = new ServerStatistics();
+                serverStatistics_.server = new List<ServerStatItem>();
             }
         }
 
@@ -194,105 +85,19 @@ namespace v2rayN.Handler
 
         public void ClearAllServerStatistics()
         {
-            if (serverStatistics_ != null)
+            if (serverStatistics_ == null || serverStatistics_.server == null)
+                return;
+
+            foreach (ServerStatItem item in serverStatistics_.server)
             {
-                foreach (var item in serverStatistics_.server)
-                {
-                    item.todayUp = 0;
-                    item.todayDown = 0;
-                    item.totalUp = 0;
-                    item.totalDown = 0;
-                    // update ui display to zero
+                item.todayUp = 0;
+                item.todayDown = 0;
+                item.totalUp = 0;
+                item.totalDown = 0;
+                if (updateFunc_ != null)
                     updateFunc_(0, 0, new List<ServerStatItem> { item });
-                }
-
-                // update statistic json file
-                SaveToFile();
             }
-        }
-
-        private ServerStatItem GetServerStatItem(string itemId)
-        {
-            long ticks = DateTime.Now.Date.Ticks;
-            int cur = Statistic.FindIndex(item => item.itemId == itemId);
-            if (cur < 0)
-            {
-                Statistic.Add(new ServerStatItem
-                {
-                    itemId = itemId,
-                    totalUp = 0,
-                    totalDown = 0,
-                    todayUp = 0,
-                    todayDown = 0,
-                    dateNow = ticks
-                });
-                cur = Statistic.Count - 1;
-            }
-            if (Statistic[cur].dateNow != ticks)
-            {
-                Statistic[cur].todayUp = 0;
-                Statistic[cur].todayDown = 0;
-                Statistic[cur].dateNow = ticks;
-            }
-            return Statistic[cur];
-        }
-
-        private void ParseOutput(Google.Protobuf.Collections.RepeatedField<Stat> source, out ulong up, out ulong down)
-        {
-
-            up = 0; down = 0;
-            try
-            {
-
-                foreach (Stat stat in source)
-                {
-                    string name = stat.Name;
-                    long value = stat.Value;
-                    string[] nStr = name.Split(">>>".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
-                    string type = "";
-
-                    name = name.Trim();
-
-                    name = nStr[1];
-                    type = nStr[3];
-
-                    if (name == Global.agentTag)
-                    {
-                        if (type == "uplink")
-                        {
-                            up = (ulong)value;
-                        }
-                        else if (type == "downlink")
-                        {
-                            down = (ulong)value;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                //Utils.SaveLog(ex.Message, ex);
-            }
-        }
-
-        private int GetFreePort()
-        {
-            int defaultPort = 28123;
-            try
-            {
-                // TCP stack please do me a favor
-                TcpListener l = new TcpListener(IPAddress.Loopback, 0);
-                l.Start();
-                int port = ((IPEndPoint)l.LocalEndpoint).Port;
-                l.Stop();
-                return port;
-            }
-            catch (Exception ex)
-            {
-                // in case access denied
-                Utils.SaveLog(ex.Message, ex);
-                return defaultPort;
-            }
+            SaveToFile();
         }
     }
 }
