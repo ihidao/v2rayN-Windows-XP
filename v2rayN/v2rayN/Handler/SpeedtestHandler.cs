@@ -307,31 +307,51 @@ namespace v2rayN.Handler
         {
             string msg = string.Empty;
             responseTime = -1;
+            Stopwatch timer = new Stopwatch();
+
             try
             {
-                HttpWebRequest myHttpWebRequest = (HttpWebRequest)WebRequest.Create(url);
-                myHttpWebRequest.Timeout = 5000;
-                myHttpWebRequest.Proxy = webProxy;//new WebProxy(Global.Loopback, Global.httpPort);
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                // XP machines and older networks may need more than the previous 5 seconds.
+                request.Timeout = 15000;
+                request.ReadWriteTimeout = 15000;
+                request.Proxy = webProxy;
+                request.KeepAlive = false;
 
-                Stopwatch timer = new Stopwatch();
                 timer.Start();
 
-                HttpWebResponse myHttpWebResponse = (HttpWebResponse)myHttpWebRequest.GetResponse();
-                if (myHttpWebResponse.StatusCode != HttpStatusCode.OK
-                    && myHttpWebResponse.StatusCode != HttpStatusCode.NoContent)
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                 {
-                    msg = myHttpWebResponse.StatusDescription;
-                }
-                timer.Stop();
-                responseTime = timer.Elapsed.Milliseconds;
+                    timer.Stop();
 
-                myHttpWebResponse.Close();
+                    if (response.StatusCode != HttpStatusCode.OK
+                        && response.StatusCode != HttpStatusCode.NoContent)
+                    {
+                        msg = response.StatusDescription;
+                    }
+                    else
+                    {
+                        responseTime = (int)timer.Elapsed.TotalMilliseconds;
+                    }
+                }
+            }
+            catch (WebException ex)
+            {
+                timer.Stop();
+                msg = ex.Status + ": " + ex.Message;
+                Utils.SaveLog("Real ping failed: " + url
+                    + ", elapsed: " + timer.Elapsed.TotalMilliseconds
+                    + "ms, error: " + msg, ex);
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                timer.Stop();
                 msg = ex.Message;
+                Utils.SaveLog("Real ping failed: " + url
+                    + ", elapsed: " + timer.Elapsed.TotalMilliseconds
+                    + "ms, error: " + msg, ex);
             }
+
             return msg;
         }
         private string FormatOut(object time, string unit)
