@@ -226,7 +226,7 @@ namespace v2rayN.Handler
                         _updateFunc(itemIndex, "测速失败: " + (error == null ? "未知错误" : error.Message));
                     };
 
-                    WebClientEx ws = downloadHandle.DownloadFileAsync(url, webProxy, timeout - 2);
+                    var ws = downloadHandle.DownloadFileAsync(url, webProxy, timeout - 2);
                     Thread.Sleep(1000 * timeout);
                     if (ws != null)
                         ws.CancelAsync();
