@@ -1,8 +1,8 @@
 # v2rayN
 
 ### How to use
-- If you are newbie please download v2rayN-Core.zip from releases
-- Otherwise please download v2rayN.zip (Also need to download v2ray core in the same folder)
+- Download v2rayN.zip frome release
+- Download v2ray-core or xray-core and geo rules, put v2ray.exe xray.exe geoip.dat geosite.dat in v2rayn folder
 - Run v2rayN.exe
 
 ### Requirements  
