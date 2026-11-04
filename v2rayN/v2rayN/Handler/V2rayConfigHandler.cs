@@ -109,7 +109,7 @@ namespace v2rayN.Handler
                     else
                     {
                         v2rayConfig.log.loglevel = config.loglevel;
-                        v2rayConfig.log.access = "";
+                        v2rayConfig.log.access = "none";
                         v2rayConfig.log.error = "";
                     }
                 }
@@ -124,7 +124,7 @@ namespace v2rayN.Handler
                     else
                     {
                         v2rayConfig.log.loglevel = config.loglevel;
-                        v2rayConfig.log.access = "";
+                        v2rayConfig.log.access = "none";
                         v2rayConfig.log.error = "";
                     }
                 }
