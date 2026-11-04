@@ -152,7 +152,10 @@ namespace v2rayN.Handler
                 for (int i = 0; i < config.vmess.Count; i++)
                 {
                     VmessItem vmessItem = config.vmess[i];
-                    UpgradeServerVersion(ref vmessItem);
+                    if (vmessItem != null && vmessItem.configVersion != 2)
+                    {
+                        UpgradeServerVersion(ref vmessItem);
+                    }
                 }
             }
 
