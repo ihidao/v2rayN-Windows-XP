@@ -39,12 +39,12 @@ namespace v2rayN.Handler
                 coreUrl = Global.xrayCoreUrl;
             }
 
-            // Detect the core version after the main window has been shown,
-            // but before generating configuration and starting the core.
-            DetectCoreVersion();
-
             if (Global.reloadV2ray)
             {
+                // Detect the core version after the main window has been shown,
+                // but before generating configuration and starting the core.
+                DetectCoreVersion();
+
                 string fileName = Utils.GetPath(v2rayConfigRes);
                 string msg;
                 if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
@@ -231,7 +231,7 @@ namespace v2rayN.Handler
                     probe.ErrorDataReceived += (sender, e) =>
                     {
                         if (!String.IsNullOrEmpty(e.Data))
-                            versionText.AppendLine(e.Data);
+                            lock (versionText) versionText.AppendLine(e.Data);
                     };
 
                     if (!probe.Start())
