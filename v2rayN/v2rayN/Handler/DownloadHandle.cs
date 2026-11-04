@@ -32,8 +32,11 @@ namespace v2rayN.Handler
         private long bytesReceived = 0;
         private Stopwatch downloadStopwatch = new Stopwatch();
         private int DownloadTimeout = -1;
-          
-        public WebClientEx DownloadFileAsync(string url, WebProxy webProxy, int downloadTimeout)
+        private string downloadFilePath;
+        private bool deleteFileAfterDownload;
+
+        public WebClientEx DownloadFileAsync(string url, WebProxy webProxy, int downloadTimeout,
+            string targetFilePath = null, bool deleteAfterDownload = false)
         {
             WebClientEx ws = new WebClientEx();
             try
@@ -48,6 +51,16 @@ namespace v2rayN.Handler
 
                 //WebClientEx ws = new WebClientEx();
                 DownloadTimeout = downloadTimeout;
+                downloadFilePath = string.IsNullOrEmpty(targetFilePath)
+                    ? Utils.GetPath(Global.DownloadFileName) : targetFilePath;
+                deleteFileAfterDownload = deleteAfterDownload;
+
+                // The old default was only 3 seconds, which is too short for a
+                // proxied speed test. Keep the request alive long enough for the
+                // explicit download timeout/cancellation to control the test.
+                ws.Timeout = downloadTimeout > 0
+                    ? Math.Max(downloadTimeout * 1000, 15000) : 30000;
+
                 if (webProxy != null)
                 {
                     ws.Proxy = webProxy;// new WebProxy(Global.Loopback, Global.httpPort);
@@ -55,7 +68,7 @@ namespace v2rayN.Handler
 
                 ws.DownloadFileCompleted += ws_DownloadFileCompleted;
                 ws.DownloadProgressChanged += ws_DownloadProgressChanged;
-                ws.DownloadFileAsync(new Uri(url), Utils.GetPath(Global.DownloadFileName));
+                ws.DownloadFileAsync(new Uri(url), downloadFilePath);
             }
             catch (Exception ex)
             {
@@ -122,6 +135,21 @@ namespace v2rayN.Handler
 
                 Error?.Invoke(this, new ErrorEventArgs(ex));
             }
+            finally
+            {
+                if (deleteFileAfterDownload && !string.IsNullOrEmpty(downloadFilePath))
+                {
+                    try
+                    {
+                        if (File.Exists(downloadFilePath))
+                            File.Delete(downloadFilePath);
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        Utils.SaveLog(cleanupException.Message, cleanupException);
+                    }
+                }
+            }
         }
 
         private string GetDownloadSpeed()
@@ -138,8 +166,11 @@ namespace v2rayN.Handler
                 || speedBytesPerSecond <= 0)
                 return "测速失败：速度计算异常";
 
+            if (speedBytesPerSecond < 1000)
+                return string.Format("{0} B/s", speedBytesPerSecond.ToString("0"));
+
             if (speedBytesPerSecond < 100000)
-                return string.Format("{0} KB/s", (speedBytesPerSecond / 1000.0).ToString("0.0"));
+                return string.Format("{0} KB/s", (speedBytesPerSecond / 1000.0).ToString("0.00"));
 
             return string.Format("{0} MB/s", (speedBytesPerSecond / 1000000.0).ToString("0.00"));
         }

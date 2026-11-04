@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -226,7 +227,12 @@ namespace v2rayN.Handler
                         _updateFunc(itemIndex, "测速失败: " + (error == null ? "未知错误" : error.Message));
                     };
 
-                    var ws = downloadHandle.DownloadFileAsync(url, webProxy, timeout - 2);
+                    // Never use v2ray-windows.zip for a speed test. That name is
+                    // reserved for downloaded core/update packages.
+                    string speedTestFile = Path.Combine(Path.GetTempPath(),
+                        "v2rayN-speedtest-" + Guid.NewGuid().ToString("N") + ".tmp");
+                    var ws = downloadHandle.DownloadFileAsync(
+                        url, webProxy, timeout - 2, speedTestFile, true);
                     Thread.Sleep(1000 * timeout);
                     if (ws != null)
                         ws.CancelAsync();
