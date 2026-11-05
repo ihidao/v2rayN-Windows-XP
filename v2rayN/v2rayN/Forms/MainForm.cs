@@ -36,7 +36,6 @@ namespace v2rayN.Forms
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
             HideForm();
-            Utils.SaveLog("[Startup] Base tray icon initialized.");
             this.Text = Utils.GetVersion();
 
             // Disable update checks for this Windows XP build.
