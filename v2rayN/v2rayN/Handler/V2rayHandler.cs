@@ -161,7 +161,9 @@ namespace v2rayN.Handler
                 UdpClient udpProbe = null;
                 try
                 {
-                    udpProbe = new UdpClient(new IPEndPoint(listenAddress, config.inbound[0].localPort));
+                    udpProbe = new UdpClient(AddressFamily.InterNetwork);
+                    udpProbe.Client.ExclusiveAddressUse = true;
+                    udpProbe.Client.Bind(new IPEndPoint(listenAddress, config.inbound[0].localPort));
                 }
                 catch (SocketException ex)
                 {
