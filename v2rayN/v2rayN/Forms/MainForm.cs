@@ -81,10 +81,7 @@ namespace v2rayN.Forms
 
         private void MainForm_Shown(object sender, EventArgs e)
         {
-            // 先启动后台核心；列表和路由菜单放到首次显示后的消息循环中构建。
-            StartInitialV2ray();
-            HideForm();
-
+            // 先把 UI 初始化任务排入消息循环，再启动后台核心，保证列表先于启动完成回调更新。
             try
             {
                 BeginInvoke((MethodInvoker)delegate
@@ -104,6 +101,9 @@ namespace v2rayN.Forms
             {
                 Utils.SaveLog("Deferred UI initialization failed: " + ex.Message, ex);
             }
+
+            StartInitialV2ray();
+            HideForm();
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
