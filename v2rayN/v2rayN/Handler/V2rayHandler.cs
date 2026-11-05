@@ -43,7 +43,7 @@ namespace v2rayN.Handler
         {
         }
 
-        public void LoadV2ray(Config config)
+        public void LoadV2ray(Config config, bool reloadConfig)
         {
             readinessPorts = new List<int>();
             if (config.inbound != null)
@@ -70,7 +70,7 @@ namespace v2rayN.Handler
                 coreUrl = Global.xrayCoreUrl;
             }
 
-            if (Global.reloadV2ray)
+            if (reloadConfig)
             {
                 string fileName = Utils.GetPath(v2rayConfigRes);
                 string msg;
