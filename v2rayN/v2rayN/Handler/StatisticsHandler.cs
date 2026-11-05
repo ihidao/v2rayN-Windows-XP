@@ -218,6 +218,8 @@ namespace v2rayN.Handler
                 // PollStatistics waits at most five seconds for the core CLI.
                 // Wait for that bounded query to finish before a replacement worker starts.
                 try { worker_.Join(6000); } catch { }
+                if (worker_.IsAlive)
+                    Utils.SaveLog("Statistics worker did not stop within the expected timeout.");
             }
             SaveToFile();
         }
