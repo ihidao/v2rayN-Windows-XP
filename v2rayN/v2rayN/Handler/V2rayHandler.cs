@@ -218,9 +218,12 @@ namespace v2rayN.Handler
 
         // Wait for the core's own startup message, then briefly verify the SOCKS listener.
         // Both output streams are consumed asynchronously to avoid pipe deadlocks.
-        private Process TryStartCore(string fileName, string arguments, List<int> ports, out string failure)
+        private Process TryStartCore(string fileName, string arguments, List<int> ports,
+            out string failure, out long startupElapsedMs)
         {
             failure = string.Empty;
+            startupElapsedMs = 0;
+            Stopwatch startupWatch = new Stopwatch();
             Process p = new Process();
             StringBuilder errorText = new StringBuilder();
             object startupLock = new object();
@@ -240,7 +243,10 @@ namespace v2rayN.Handler
             DataReceivedEventHandler outputHandler = (sender, e) =>
             {
                 if (String.IsNullOrEmpty(e.Data)) return;
-                ShowMsg(false, e.Data + Environment.NewLine);
+                // Hide only the standard core banner and its routine startup-success line.
+                // Keep all other stdout warnings/errors visible to the user.
+                if (!IsRoutineCoreOutput(e.Data))
+                    ShowMsg(false, e.Data + Environment.NewLine);
                 if (IsCoreStartedMessage(e.Data))
                 {
                     lock (startupLock) startedMessageSeen = true;
@@ -263,6 +269,7 @@ namespace v2rayN.Handler
                 if (!p.Start())
                     throw new Exception("Process.Start returned false.");
 
+                startupWatch.Start();
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
@@ -286,7 +293,10 @@ namespace v2rayN.Handler
                     // The startup message is the primary signal. Verify the configured
                     // SOCKS listener for up to 2 more seconds before enabling the proxy.
                     if (ports == null || ports.Count == 0)
+                    {
+                        startupElapsedMs = startupWatch.ElapsedMilliseconds;
                         return p;
+                    }
 
                     // Poll at 50 ms intervals so the UI can proceed promptly once
                     // the SOCKS listener is available, without adding a fixed startup delay.
@@ -297,7 +307,7 @@ namespace v2rayN.Handler
                         {
                             if (!p.WaitForExit(50))
                             {
-                                ShowMsg(false, "内核启动提示与 SOCKS 端口检查均通过。" + Environment.NewLine);
+                                startupElapsedMs = startupWatch.ElapsedMilliseconds;
                                 return p;
                             }
                             break;
@@ -309,6 +319,7 @@ namespace v2rayN.Handler
                 if (!p.HasExited)
                 {
                     lock (startupLock) started = startedMessageSeen;
+                    startupElapsedMs = startupWatch.ElapsedMilliseconds;
                     failure = started
                         ? "内核已输出启动成功提示，但 SOCKS 入站端口在 2 秒内未就绪。"
                         : "内核进程仍在运行，但在 10 秒内未输出启动成功提示。";
@@ -323,6 +334,7 @@ namespace v2rayN.Handler
                 }
 
                 p.WaitForExit();
+                startupElapsedMs = startupWatch.ElapsedMilliseconds;
                 lock (errorText) failure = errorText.ToString();
                 if (String.IsNullOrEmpty(failure))
                     failure = "内核进程在启动检查期间退出，退出代码: " + p.ExitCode;
@@ -346,6 +358,27 @@ namespace v2rayN.Handler
                     || line.IndexOf("Xray", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
+        private bool IsRoutineCoreOutput(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+            if (IsCoreStartedMessage(line)) return true;
+
+            string value = line.Trim();
+            if (String.Equals(value, "A unified platform for anti-censorship.",
+                StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Standard V2Ray/Xray version banners; do not suppress arbitrary warnings.
+            if (value.StartsWith("V2Ray ", StringComparison.OrdinalIgnoreCase)
+                && value.IndexOf("(V2Fly", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (value.StartsWith("Xray ", StringComparison.OrdinalIgnoreCase)
+                && value.IndexOf("(Xray,", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            return false;
+        }
+
         private bool IsAnyPortReady(List<int> ports)
         {
             if (ports == null || ports.Count == 0) return false;
@@ -364,27 +397,42 @@ namespace v2rayN.Handler
             return false;
         }
 
-        private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports, out string failure)
+        private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports,
+            out string failure, out long startupElapsedMs, out bool usedLegacyArguments)
         {
+            Stopwatch totalWatch = Stopwatch.StartNew();
+            startupElapsedMs = 0;
+            usedLegacyArguments = false;
+
             string error5;
+            long attempt5Ms;
             Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports,
-                out error5);
+                out error5, out attempt5Ms);
             if (p != null)
             {
+                totalWatch.Stop();
+                startupElapsedMs = totalWatch.ElapsedMilliseconds;
                 failure = string.Empty;
+                Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=5.x; elapsed="
+                    + startupElapsedMs + " ms; SOCKS ready.");
                 return p;
             }
 
-            ShowMsg(false, "V2Ray 5.x 启动方式失败，尝试 4.x 参数方式..." + Environment.NewLine
-                + error5 + Environment.NewLine);
+            Utils.SaveLog("[CoreStartup] 5.x arguments failed after " + attempt5Ms
+                + " ms; trying legacy 4.x arguments. " + error5);
 
             string error4;
+            long attempt4Ms;
             p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports,
-                out error4);
+                out error4, out attempt4Ms);
+            totalWatch.Stop();
+            startupElapsedMs = totalWatch.ElapsedMilliseconds;
             if (p != null)
             {
+                usedLegacyArguments = true;
                 failure = string.Empty;
-                ShowMsg(false, "已通过 V2Ray 4.x 参数方式启动内核。" + Environment.NewLine);
+                Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=4.x fallback; elapsed="
+                    + startupElapsedMs + " ms; SOCKS ready.");
                 return p;
             }
 
@@ -403,15 +451,22 @@ namespace v2rayN.Handler
                 if (fileName == "") return;
 
                 string failure;
+                long startupElapsedMs;
+                bool usedLegacyArguments;
                 Process p = StartCoreWithFallback(fileName,
-                    Utils.GetPath(v2rayConfigRes), readinessPorts, out failure);
+                    Utils.GetPath(v2rayConfigRes), readinessPorts, out failure,
+                    out startupElapsedMs, out usedLegacyArguments);
                 if (p == null)
                     throw new Exception(failure);
 
                 try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                 _process = p;
                 Global.processJob.AddProcess(p.Handle);
-                ShowMsg(false, "V2Ray core started. PID=" + p.Id);
+                ShowMsg(false, "核心启动成功，PID=" + p.Id
+                    + "，耗时 " + (startupElapsedMs / 1000.0).ToString("0.0")
+                    + " 秒，SOCKS 端口已就绪。"
+                    + (usedLegacyArguments ? "（兼容参数模式）" : "")
+                    + Environment.NewLine);
             }
             catch (Exception ex)
             {
@@ -435,7 +490,10 @@ namespace v2rayN.Handler
                 File.WriteAllText(tempConfigFile, configStr, new UTF8Encoding(false));
 
                 string failure;
-                p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure);
+                long startupElapsedMs;
+                bool usedLegacyArguments;
+                p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure,
+                    out startupElapsedMs, out usedLegacyArguments);
                 if (p == null)
                     throw new Exception("V2Ray speed-test core failed to start. " + failure);
 
