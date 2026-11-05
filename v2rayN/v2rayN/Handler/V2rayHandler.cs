@@ -20,6 +20,25 @@ namespace v2rayN.Handler
         private Process _process;
         private List<int> readinessPorts = new List<int>();
 
+        /// <summary>
+        /// True only while the process launched by this handler is still alive.
+        /// The UI uses this before applying the Windows system proxy.
+        /// </summary>
+        public bool IsCoreRunning
+        {
+            get
+            {
+                try
+                {
+                    return _process != null && !_process.HasExited;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+
         public V2rayHandler()
         {
         }
