@@ -34,9 +34,10 @@ namespace v2rayN.Handler
         private int DownloadTimeout = -1;
         private string downloadFilePath;
         private bool deleteFileAfterDownload;
+        private bool cancellationIsFailure;
 
         public WebClientEx DownloadFileAsync(string url, WebProxy webProxy, int downloadTimeout,
-            string targetFilePath = null, bool deleteAfterDownload = false)
+            string targetFilePath = null, bool deleteAfterDownload = false, bool failOnCancellation = false)
         {
             WebClientEx ws = new WebClientEx();
             try
@@ -54,6 +55,7 @@ namespace v2rayN.Handler
                 downloadFilePath = string.IsNullOrEmpty(targetFilePath)
                     ? Utils.GetPath(Global.DownloadFileName) : targetFilePath;
                 deleteFileAfterDownload = deleteAfterDownload;
+                cancellationIsFailure = failOnCancellation;
 
                 // The old default was only 3 seconds, which is too short for a
                 // proxied speed test. Keep the request alive long enough for the
@@ -111,7 +113,9 @@ namespace v2rayN.Handler
                     {
                         ((WebClientEx)sender).Dispose();
                         downloadStopwatch.Stop();
-                        if (bytesReceived <= 0)
+                        if (cancellationIsFailure)
+                            UpdateCompleted(this, new ResultEventArgs(false, "下载超时或已取消"));
+                        else if (bytesReceived <= 0)
                             UpdateCompleted(this, new ResultEventArgs(false, "测速失败：未收到数据"));
                         else
                             UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
