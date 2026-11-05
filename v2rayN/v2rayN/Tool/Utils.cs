@@ -912,7 +912,7 @@ namespace v2rayN
                         writer.Write("[");
                         writer.Write(DateTime.Now.ToString("HH:mm:ss"));
                         writer.Write("] [");
-                        writer.Write(string.IsNullOrEmpty(strTitle) ? "INFO" : strTitle.ToUpperInvariant());
+                        writer.Write(string.IsNullOrEmpty(strTitle) ? "INFO" : strTitle);
                         writer.Write("] ");
                         writer.WriteLine(strContent ?? string.Empty);
                     }
