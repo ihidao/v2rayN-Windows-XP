@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  Build_v2rayN_for_XP:
     runs-on: windows-2022
     steps:
       - name: Checkout source
