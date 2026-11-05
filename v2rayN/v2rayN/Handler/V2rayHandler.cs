@@ -158,7 +158,7 @@ namespace v2rayN.Handler
                         continue;
 
                     message = String.Format(
-                        "本地 TCP 端口 {0}:{1} 已处于 LISTENING 状态，可能被其他程序占用。\\r\\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
+                        "本地 TCP 端口 {0}:{1} 已处于 LISTENING 状态，可能被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
                         listenAddress, port);
                     return true;
                 }
