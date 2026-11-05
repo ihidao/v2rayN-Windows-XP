@@ -254,10 +254,13 @@ namespace v2rayN.Handler
                     if (parts.Length >= 2)
                         detectedCoreNameVersion = parts[0] + " " + parts[1];
                 }
-                // Hide only the standard core banner and its routine startup-success line.
-                // Keep all other stdout warnings/errors visible to the user.
-                if (!IsRoutineCoreOutput(e.Data))
+                // Keep warning/error details in the daily log file; do not forward
+                // routine connection chatter to the GUI log window.
+                if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
+                {
+                    Utils.SaveLog("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
+                }
                 if (IsCoreStartedMessage(e.Data))
                 {
                     lock (startupLock) startedMessageSeen = true;
@@ -268,7 +271,12 @@ namespace v2rayN.Handler
                 if (String.IsNullOrEmpty(e.Data)) return;
                 lock (errorText) errorText.AppendLine(e.Data);
                 if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
+                {
+                    // Preserve full core diagnostics in guiLogs even when the GUI
+                    // displays only the concise warning/error line.
+                    Utils.SaveLog("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
+                }
                 if (IsCoreStartedMessage(e.Data))
                 {
                     lock (startupLock) startedMessageSeen = true;
