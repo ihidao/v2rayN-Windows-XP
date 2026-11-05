@@ -640,49 +640,52 @@ namespace v2rayN.Forms
 
                     if (startupExiting)
                     {
+                        // A return statement is not legal inside a finally clause.
+                        // Stop the core and skip posting UI work while the app exits.
                         try { v2rayHandler.V2rayStop(); } catch { }
-                        return;
                     }
-
-                    try
+                    else
                     {
-                        if (!IsDisposed && IsHandleCreated)
+                        try
                         {
-                            BeginInvoke((MethodInvoker)delegate
+                            if (!IsDisposed && IsHandleCreated)
                             {
-                                if (startupExiting || IsDisposed) return;
-
-                                coreRestartInProgress = false;
-                                ConfigHandler.SaveConfig(ref config, false);
-
-                                // If another operation changed settings while this restart
-                                // was running, restart once more using the newest snapshot.
-                                if (coreRestartPending)
+                                BeginInvoke((MethodInvoker)delegate
                                 {
-                                    bool reloadAgain = pendingReloadConfig;
-                                    coreRestartPending = false;
-                                    pendingReloadConfig = false;
-                                    Global.reloadV2ray = Global.reloadV2ray || reloadAgain;
-                                    LoadV2ray();
-                                    return;
-                                }
+                                    if (startupExiting || IsDisposed) return;
 
-                                if (coreReady)
-                                {
-                                    ChangePACButtonStatus(config.sysProxyType);
-                                }
-                                else
-                                {
-                                    AppendText(false, "核心未就绪，未更新系统代理。");
-                                }
+                                    coreRestartInProgress = false;
+                                    ConfigHandler.SaveConfig(ref config, false);
 
-                                tsbReload.Enabled = true;
-                                Invalidate(true);
-                                Update();
-                            });
+                                    // If another operation changed settings while this restart
+                                    // was running, restart once more using the newest snapshot.
+                                    if (coreRestartPending)
+                                    {
+                                        bool reloadAgain = pendingReloadConfig;
+                                        coreRestartPending = false;
+                                        pendingReloadConfig = false;
+                                        Global.reloadV2ray = Global.reloadV2ray || reloadAgain;
+                                        LoadV2ray();
+                                        return;
+                                    }
+
+                                    if (coreReady)
+                                    {
+                                        ChangePACButtonStatus(config.sysProxyType);
+                                    }
+                                    else
+                                    {
+                                        AppendText(false, "核心未就绪，未更新系统代理。");
+                                    }
+
+                                    tsbReload.Enabled = true;
+                                    Invalidate(true);
+                                    Update();
+                                });
+                            }
                         }
+                        catch { }
                     }
-                    catch { }
                 }
             });
             restartThread.IsBackground = true;
