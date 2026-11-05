@@ -9,8 +9,8 @@ using v2rayN.Mode;
 
 namespace v2rayN.Handler
 {
-    // Uses the V2Ray 5.x built-in "api stats -json" command instead of
-    // Grpc.Core. This avoids the native gRPC runtime that is unsuitable for
+    // Uses the core built-in statistics CLI instead of
+    // Grpc.Core. V2Ray and Xray have different CLI syntax. This avoids the native gRPC runtime that is unsuitable for
     // the Windows XP / .NET Framework 4.0 target.
     class StatisticsHandler
     {
@@ -102,7 +102,12 @@ namespace v2rayN.Handler
 
             ProcessStartInfo info = new ProcessStartInfo();
             info.FileName = corePath;
-            info.Arguments = "api stats -json --server=127.0.0.1:" + Global.statePort.ToString(CultureInfo.InvariantCulture);
+            string server = "--server=127.0.0.1:" + Global.statePort.ToString(CultureInfo.InvariantCulture);
+            // V2Ray 5.x uses "stats -json"; Xray 1.x uses "statsquery".
+            // Both commands return the same JSON shape expected below.
+            info.Arguments = config_.coreType == ECoreType.v2fly_core
+                ? "api stats -json " + server
+                : "api statsquery " + server;
             info.WorkingDirectory = Utils.StartupPath();
             info.UseShellExecute = false;
             info.CreateNoWindow = true;
