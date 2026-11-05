@@ -23,7 +23,6 @@ namespace v2rayN.Forms
         private StatisticsHandler statistics = null;
         private string MsgFilter = string.Empty;
         private volatile bool startupExiting;
-        private readonly ManualResetEvent startupDone = new ManualResetEvent(true);
 
         #region Window 事件
 
@@ -54,14 +53,22 @@ namespace v2rayN.Forms
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            Stopwatch startupWatch = Stopwatch.StartNew();
             ConfigHandler.LoadConfig(ref config);
+            Utils.SaveLog("[Startup] Config.LoadConfig: " + startupWatch.ElapsedMilliseconds + " ms");
+
+            startupWatch.Restart();
             ConfigHandler.InitBuiltinRouting(ref config);
+            Utils.SaveLog("[Startup] Built-in routing initialization: " + startupWatch.ElapsedMilliseconds + " ms");
+
             v2rayHandler = new V2rayHandler();
             v2rayHandler.ProcessEvent += v2rayHandler_ProcessEvent;
 
             if (config.enableStatistics)
             {
+                startupWatch.Restart();
                 statistics = new StatisticsHandler(config, UpdateStatisticsHandler);
+                Utils.SaveLog("[Startup] Statistics data initialization: " + startupWatch.ElapsedMilliseconds + " ms");
             }
         }
 
@@ -446,7 +453,10 @@ namespace v2rayN.Forms
             }
             if (startupConfig == null)
             {
-                startupConfig = config;
+                Utils.SaveLog("Initial core startup cancelled: config snapshot could not be created.");
+                AppendText(false, "启动配置快照创建失败，已取消后台启动。");
+                tsbReload.Enabled = true;
+                return;
             }
 
             ThreadPool.QueueUserWorkItem(delegate
@@ -479,7 +489,6 @@ namespace v2rayN.Forms
                         try { v2rayHandler.V2rayStop(); } catch { }
                     }
 
-                    startupDone.Set();
                     try
                     {
                         if (!startupExiting && !IsDisposed && IsHandleCreated)
