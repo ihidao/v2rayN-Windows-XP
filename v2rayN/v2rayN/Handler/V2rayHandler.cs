@@ -134,8 +134,7 @@ namespace v2rayN.Handler
                 catch (SocketException ex)
                 {
                     message = String.Format(
-                        "启动内核失败：本地端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。
-详细信息：{2}",
+                        "启动内核失败：本地端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。\\r\\n详细信息：{2}",
                         listenAddress, port, ex.Message);
                     return true;
                 }
