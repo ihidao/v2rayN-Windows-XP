@@ -882,37 +882,41 @@ namespace v2rayN
 
         #region Log
 
+        private static readonly object LogLock = new object();
+
         public static void SaveLog(string strContent)
         {
-            SaveLog("info", new Exception(strContent));
+            SaveLog("INFO", strContent);
         }
+
         public static void SaveLog(string strTitle, Exception ex)
+        {
+            SaveLog(strTitle, ex == null ? string.Empty : ex.ToString());
+        }
+
+        private static void SaveLog(string strTitle, string strContent)
         {
             try
             {
-                string path = Path.Combine(StartupPath(), "guiLogs");
-                string FilePath = Path.Combine(path, DateTime.Now.ToString("yyyyMMdd") + ".txt");
-                if (!Directory.Exists(path))
+                lock (LogLock)
                 {
-                    Directory.CreateDirectory(path);
-                }
-                if (!File.Exists(FilePath))
-                {
-                    FileStream FsCreate = new FileStream(FilePath, FileMode.Create);
-                    FsCreate.Close();
-                    FsCreate.Dispose();
-                }
-                FileStream FsWrite = new FileStream(FilePath, FileMode.Append, FileAccess.Write);
-                StreamWriter SwWrite = new StreamWriter(FsWrite);
+                    string path = Path.Combine(StartupPath(), "guiLogs");
+                    if (!Directory.Exists(path))
+                    {
+                        Directory.CreateDirectory(path);
+                    }
 
-                string strContent = ex.ToString();
-
-                SwWrite.WriteLine(string.Format("{0}{1}[{2}]{3}", "--------------------------------", strTitle, DateTime.Now.ToString("HH:mm:ss"), "--------------------------------"));
-                SwWrite.Write(strContent);
-                SwWrite.WriteLine(Environment.NewLine);
-                SwWrite.WriteLine(" ");
-                SwWrite.Flush();
-                SwWrite.Close();
+                    string filePath = Path.Combine(path, DateTime.Now.ToString("yyyyMMdd") + ".txt");
+                    using (StreamWriter writer = new StreamWriter(filePath, true, Encoding.UTF8))
+                    {
+                        writer.Write("[");
+                        writer.Write(DateTime.Now.ToString("HH:mm:ss"));
+                        writer.Write("] [");
+                        writer.Write(string.IsNullOrEmpty(strTitle) ? "INFO" : strTitle.ToUpperInvariant());
+                        writer.Write("] ");
+                        writer.WriteLine(strContent ?? string.Empty);
+                    }
+                }
             }
             catch { }
         }
