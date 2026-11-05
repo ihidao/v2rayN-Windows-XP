@@ -70,7 +70,9 @@ namespace v2rayN.Handler
                 coreUrl = Global.xrayCoreUrl;
             }
 
-            if (reloadConfig)
+            // 配置发生变化时需要重载；即使配置没有变化，只要本程序管理的核心已退出，
+            // 也应重新生成配置并启动核心，不能仅因旧进程不再运行就报告“核心未就绪”。
+            if (reloadConfig || !IsCoreRunning)
             {
                 string conflict;
                 if (FindInboundPortConflict(config, out conflict))
@@ -256,27 +258,18 @@ namespace v2rayN.Handler
         {
             try
             {
+                // 只停止由当前 V2rayHandler 启动并持有的进程。
+                // 不再按进程名扫描并结束同目录内核，避免误杀其他程序启动/使用的核心。
                 if (_process != null)
                 {
-                    KillProcess(_process);
-                    _process.Dispose();
-                    _process = null;
-                }
-                else if (lstV2ray != null)
-                {
-                    foreach (string vName in lstV2ray)
+                    try
                     {
-                        Process[] existing = Process.GetProcessesByName(vName);
-                        foreach (Process p in existing)
-                        {
-                            try
-                            {
-                                string path = p.MainModule.FileName;
-                                if (string.Equals(path, Utils.GetPath(vName + ".exe"), StringComparison.OrdinalIgnoreCase))
-                                    KillProcess(p);
-                            }
-                            catch { }
-                        }
+                        KillProcess(_process);
+                    }
+                    finally
+                    {
+                        _process.Dispose();
+                        _process = null;
                     }
                 }
             }
