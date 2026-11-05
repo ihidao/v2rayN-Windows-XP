@@ -1047,12 +1047,12 @@ namespace v2rayN.Forms
             {
                 RefreshServers();
 
-                // Logging changes do not affect the generated core configuration.
-                // Avoid restarting the core and interrupting active connections.
+                // Avoid restarting when the options dialog was saved without any changes.
+                // Core logging changes are compared too because the core reads them at startup.
                 if (configBefore != null && CoreSettingsUnchanged(configBefore, config))
                 {
                     Global.reloadV2ray = false;
-                    Utils.SaveLog("[Settings] Core configuration unchanged; core restart skipped.");
+                    Utils.SaveLog("[Settings] No configuration changes; core restart skipped.");
                     return;
                 }
 
@@ -1072,10 +1072,8 @@ namespace v2rayN.Forms
                 if (normalizedBefore == null || normalizedAfter == null)
                     return false;
 
-                // Ignore only the two logging fields when comparing saved options.
-                normalizedBefore.logEnabled = normalizedAfter.logEnabled;
-                normalizedBefore.loglevel = normalizedAfter.loglevel;
-
+                // Core log level and log output are part of the generated core
+                // configuration, so a real logging change must still restart the core.
                 return String.Equals(Utils.ToJson(normalizedBefore),
                     Utils.ToJson(normalizedAfter), StringComparison.Ordinal);
             }
