@@ -1213,12 +1213,16 @@ namespace v2rayN.Forms
                 // 默认隐藏内核高频连接记录，避免正常使用时日志刷屏。
                 string[] lines = text.Replace("\r\n", "\n").Split('\n');
                 StringBuilder visibleText = new StringBuilder();
+                bool hasVisibleLine = false;
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (!IsVerboseLogLine(lines[i]))
-                        visibleText.Append(lines[i]);
-                    if (i < lines.Length - 1)
+                    if (IsVerboseLogLine(lines[i]))
+                        continue;
+
+                    if (hasVisibleLine)
                         visibleText.Append(Environment.NewLine);
+                    visibleText.Append(lines[i]);
+                    hasVisibleLine = true;
                 }
                 if (visibleText.Length > 0)
                     ShowMsg(visibleText.ToString());
