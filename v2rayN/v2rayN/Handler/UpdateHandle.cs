@@ -316,7 +316,8 @@ namespace v2rayN.Handler
                     }
                 }
                 else if (!string.IsNullOrEmpty(args.Msg)
-                    && args.Msg.StartsWith("测速失败", StringComparison.Ordinal))
+                    && (args.Msg.StartsWith("测速失败", StringComparison.Ordinal)
+                        || args.Msg.StartsWith("下载超时", StringComparison.Ordinal)))
                 {
                     HandleGeoFileDownloadFailure(geoName, url, proxy, directTempPath,
                         retryDirect, new IOException(args.Msg));
@@ -335,7 +336,7 @@ namespace v2rayN.Handler
                     retryDirect, args.GetException());
             };
 
-            downloadHandle.DownloadFileAsync(url, proxy, 600, downloadPath, false);
+            downloadHandle.DownloadFileAsync(url, proxy, 600, downloadPath, false, true);
         }
 
 
