@@ -139,14 +139,14 @@ namespace v2rayN.Handler
                 catch (SocketException ex)
                 {
                     message = String.Format(
-                        "启动内核失败：本地端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。\r\n详细信息：{2}",
+                        "本地 TCP 端口 {0}:{1} 无法监听，可能已被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。\r\n详细信息：{2}",
                         listenAddress, port, ex.Message);
                     return true;
                 }
                 catch (Exception ex)
                 {
                     message = String.Format(
-                        "启动内核失败：无法检查本地端口 {0}:{1}。\r\n详细信息：{2}",
+                        "无法检查本地 TCP 端口 {0}:{1}。\r\n请检查端口设置及系统网络权限。\r\n详细信息：{2}",
                         listenAddress, port, ex.Message);
                     return true;
                 }
@@ -173,14 +173,14 @@ namespace v2rayN.Handler
                 catch (SocketException ex)
                 {
                     message = String.Format(
-                        "启动内核失败：本地 UDP 端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。\r\n详细信息：{2}",
+                        "本地 UDP 端口 {0}:{1} 无法监听，可能已被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。\r\n详细信息：{2}",
                         listenAddress, config.inbound[0].localPort, ex.Message);
                     return true;
                 }
                 catch (Exception ex)
                 {
                     message = String.Format(
-                        "启动内核失败：无法检查本地 UDP 端口 {0}:{1}。\r\n详细信息：{2}",
+                        "无法检查本地 UDP 端口 {0}:{1}。\r\n请检查端口设置及系统网络权限。\r\n详细信息：{2}",
                         listenAddress, config.inbound[0].localPort, ex.Message);
                     return true;
                 }
@@ -581,9 +581,9 @@ namespace v2rayN.Handler
                 return p;
             }
 
-            failure = "Core failed to start with both command-line formats."
-                + Environment.NewLine + "[-c]" + Environment.NewLine + error5
-                + Environment.NewLine + "[-config]" + Environment.NewLine + error4;
+            failure = "内核启动失败：新旧两种命令行参数均未能启动核心。"
+                + Environment.NewLine + "[新参数 -c]" + Environment.NewLine + error5
+                + Environment.NewLine + "[兼容参数 -config]" + Environment.NewLine + error4;
             return null;
         }
 
@@ -639,7 +639,7 @@ namespace v2rayN.Handler
                 p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
-                    throw new Exception("V2Ray speed-test core failed to start. " + failure);
+                    throw new Exception("真连接测速内核启动失败。" + failure);
 
                 // The core has loaded its configuration; the temporary file is no longer needed.
                 try { File.Delete(tempConfigFile); } catch { }
