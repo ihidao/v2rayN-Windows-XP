@@ -1255,24 +1255,37 @@ namespace v2rayN.Forms
             string level = "Info";
             if (lower.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("panic:", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0)
+                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("失败", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("错误", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("无法", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("异常", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("未能", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("failed", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("exception", StringComparison.Ordinal) >= 0)
                 level = "Error";
             else if (lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0)
+                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("警告", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("核心未就绪", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("已退出", StringComparison.Ordinal) >= 0)
                 level = "Warning";
-            else if (lower.IndexOf("[debug]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[info]", StringComparison.Ordinal) >= 0)
-            {
-                // 保留已有等级，只补充内核风格的日期时间戳。
+
+            // 已有等级时只补时间戳，避免重复添加 [Error]/[Warning]。
+            if (lower.IndexOf("[debug]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[info]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[fatal]", StringComparison.Ordinal) >= 0)
                 return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line;
-            }
 
             return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")
                 + " [" + level + "] " + line;
         }
 
         /// <summary>
-        /// 按设置的日志等级过滤统一格式化后的日志；GUI 操作提示也使用 Info 等级。
+        /// 按设置的日志等级过滤统一格式化后的日志；GUI 操作提示按内容区分 Info、Warning 和 Error 等级。
         /// </summary>
         private bool ShouldShowLogLevelLine(string line)
         {
