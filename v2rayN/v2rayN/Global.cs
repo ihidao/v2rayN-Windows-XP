@@ -8,7 +8,7 @@ namespace v2rayN
         #region 常量
 
         public const string DownloadFileName = "v2ray-windows.zip";
-        public const string v2rayWebsiteUrl = @"https://www.v2fly.org/";
+        public const string v2rayWebsiteUrl = @"https://github.com/ihidao/v2ray-core_xray-core_for_XP";
         public const string AboutUrl = @"https://github.com/ihidao/v2rayN_for_XP";
         public const string UpdateUrl = AboutUrl + @"/releases";
         public const string v2flyCoreUrl = "https://github.com/v2fly/v2ray-core/releases";
