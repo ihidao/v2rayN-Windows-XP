@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using v2rayN.Mode;
@@ -127,35 +128,39 @@ namespace v2rayN.Handler
                     portsToCheck.Add(httpPort);
             }
 
+            // TCP 只检查系统当前的监听端点，不通过临时绑定探测。
+            // FIN_WAIT_2、TIME_WAIT 等连接状态不是监听状态，不应被误报为端口冲突。
+            IPEndPoint[] activeListeners;
+            try
+            {
+                activeListeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+            }
+            catch (Exception ex)
+            {
+                // 无法读取监听列表时不阻止启动；由核心实际绑定端口并报告真实错误。
+                Utils.SaveLog("Unable to query active TCP listeners; skip TCP pre-check: " + ex.Message, ex);
+                activeListeners = new IPEndPoint[0];
+            }
+
             foreach (int port in portsToCheck)
             {
-                TcpListener probe = null;
-                try
+                foreach (IPEndPoint listener in activeListeners)
                 {
-                    probe = new TcpListener(listenAddress, port);
-                    probe.Server.ExclusiveAddressUse = true;
-                    probe.Start();
-                }
-                catch (SocketException ex)
-                {
+                    if (listener == null || listener.Port != port)
+                        continue;
+
+                    // 监听在 0.0.0.0 上的端点与所有 IPv4 地址冲突；
+                    // 目标为 0.0.0.0 时，任何同端口 IPv4 监听端点都冲突。
+                    bool addressConflict = listener.Address.Equals(IPAddress.Any)
+                        || listenAddress.Equals(IPAddress.Any)
+                        || listener.Address.Equals(listenAddress);
+                    if (!addressConflict)
+                        continue;
+
                     message = String.Format(
-                        "本地 TCP 端口 {0}:{1} 无法监听，可能已被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。\r\n详细信息：{2}",
-                        listenAddress, port, ex.Message);
+                        "本地 TCP 端口 {0}:{1} 已处于 LISTENING 状态，可能被其他程序占用。\\r\\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
+                        listenAddress, port);
                     return true;
-                }
-                catch (Exception ex)
-                {
-                    message = String.Format(
-                        "无法检查本地 TCP 端口 {0}:{1}。\r\n请检查端口设置及系统网络权限。\r\n详细信息：{2}",
-                        listenAddress, port, ex.Message);
-                    return true;
-                }
-                finally
-                {
-                    if (probe != null)
-                    {
-                        try { probe.Stop(); } catch { }
-                    }
                 }
             }
 
