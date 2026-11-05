@@ -1210,23 +1210,65 @@ namespace v2rayN.Forms
                     }
                 }
 
-                // 按设置的核心日志等级过滤带级别的日志；无级别的 v2rayN 操作提示始终保留。
+                // 将 v2rayN 自身提示统一成与内核相同的“日期 时间 [等级] 内容”格式；
+                // 已带时间戳的内核日志和真连接测速日志保持原样。
                 string[] lines = text.Replace("\r\n", "\n").Split('\n');
                 StringBuilder visibleText = new StringBuilder();
                 bool hasVisibleLine = false;
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (!ShouldShowLogLevelLine(lines[i]) || IsVerboseLogLine(lines[i]))
+                    string displayLine = FormatLogLine(lines[i]);
+                    if (String.IsNullOrEmpty(displayLine)
+                        || !ShouldShowLogLevelLine(displayLine)
+                        || IsVerboseLogLine(displayLine))
                         continue;
 
                     if (hasVisibleLine)
                         visibleText.Append(Environment.NewLine);
-                    visibleText.Append(lines[i]);
+                    visibleText.Append(displayLine);
                     hasVisibleLine = true;
                 }
                 if (visibleText.Length > 0)
                     ShowMsg(visibleText.ToString());
             }
+        }
+
+        /// <summary>
+        /// 统一日志显示格式：yyyy/MM/dd HH:mm:ss [Info|Warning|Error] 内容。
+        /// 核心原生时间戳及真连接测速的 [HH:mm:ss] 格式不重复添加时间。
+        /// </summary>
+        private string FormatLogLine(string line)
+        {
+            if (String.IsNullOrEmpty(line))
+                return line;
+
+            // 已经有完整日期时间戳，保持核心原始输出。
+            if (Regex.IsMatch(line, @"^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}"))
+                return line;
+
+            // 真连接测速模块已有自己的时分秒与等级格式。
+            if (Regex.IsMatch(line, @"^\\[\\d{2}:\\d{2}:\\d{2}\\] \\[(INFO|WARNING|ERROR)\\]",
+                RegexOptions.IgnoreCase))
+                return line;
+
+            string lower = line.ToLowerInvariant();
+            string level = "Info";
+            if (lower.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("panic:", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0)
+                level = "Error";
+            else if (lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0)
+                level = "Warning";
+            else if (lower.IndexOf("[debug]", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("[info]", StringComparison.Ordinal) >= 0)
+            {
+                // 保留已有等级，只补充内核风格的日期时间戳。
+                return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line;
+            }
+
+            return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")
+                + " [" + level + "] " + line;
         }
 
         /// <summary>
