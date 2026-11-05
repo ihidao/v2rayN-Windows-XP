@@ -164,37 +164,39 @@ namespace v2rayN.Handler
                 }
             }
 
-            // SOCKS 入站启用 UDP 时，也检查同一端口的 UDP 绑定冲突。
+            // UDP 端口也通过系统绑定端点查询，不再临时独占绑定探测。
+            // 临时绑定容易与旧核心退出过程产生竞态；查询失败时交由核心报告真实错误。
             if (config.inbound[0] != null && config.inbound[0].udpEnabled
                 && config.inbound[0].localPort > 0)
             {
-                UdpClient udpProbe = null;
+                IPEndPoint[] activeUdpListeners;
                 try
                 {
-                    udpProbe = new UdpClient(AddressFamily.InterNetwork);
-                    udpProbe.Client.ExclusiveAddressUse = true;
-                    udpProbe.Client.Bind(new IPEndPoint(listenAddress, config.inbound[0].localPort));
-                }
-                catch (SocketException ex)
-                {
-                    message = String.Format(
-                        "本地 UDP 端口 {0}:{1} 无法监听，可能已被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。\r\n详细信息：{2}",
-                        listenAddress, config.inbound[0].localPort, ex.Message);
-                    return true;
+                    activeUdpListeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveUdpListeners();
                 }
                 catch (Exception ex)
                 {
-                    message = String.Format(
-                        "无法检查本地 UDP 端口 {0}:{1}。\r\n请检查端口设置及系统网络权限。\r\n详细信息：{2}",
-                        listenAddress, config.inbound[0].localPort, ex.Message);
-                    return true;
+                    Utils.SaveLog("Unable to query active UDP listeners; skip UDP pre-check: " + ex.Message, ex);
+                    activeUdpListeners = new IPEndPoint[0];
                 }
-                finally
+
+                foreach (IPEndPoint listener in activeUdpListeners)
                 {
-                    if (udpProbe != null)
-                    {
-                        try { udpProbe.Close(); } catch { }
-                    }
+                    if (listener == null
+                        || listener.Address.AddressFamily != AddressFamily.InterNetwork
+                        || listener.Port != config.inbound[0].localPort)
+                        continue;
+
+                    bool addressConflict = listener.Address.Equals(IPAddress.Any)
+                        || listenAddress.Equals(IPAddress.Any)
+                        || listener.Address.Equals(listenAddress);
+                    if (!addressConflict)
+                        continue;
+
+                    message = String.Format(
+                        "本地 UDP 端口 {0}:{1} 已被绑定，可能被其他程序占用。\\r\\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
+                        listenAddress, config.inbound[0].localPort);
+                    return true;
                 }
             }
             return false;
@@ -270,15 +272,16 @@ namespace v2rayN.Handler
                 // 不再按进程名扫描并结束同目录内核，避免误杀其他程序启动/使用的核心。
                 if (_process != null)
                 {
-                    try
-                    {
-                        KillProcess(_process);
-                    }
-                    finally
-                    {
-                        _process.Dispose();
-                        _process = null;
-                    }
+                    Process oldProcess = _process;
+                    KillProcess(oldProcess);
+
+                    // Never forget a process that is still alive: the next start
+                    // must not race its UDP/TCP listeners being released.
+                    if (!oldProcess.HasExited)
+                        throw new InvalidOperationException("旧内核进程仍在退出，已取消本次启动。PID=" + oldProcess.Id);
+
+                    oldProcess.Dispose();
+                    _process = null;
                 }
             }
             catch (Exception ex)
@@ -681,10 +684,11 @@ namespace v2rayN.Handler
             {
                 if (p == null || p.HasExited) return;
                 p.CloseMainWindow();
-                if (!p.WaitForExit(300))
+                if (!p.WaitForExit(500))
                 {
                     p.Kill();
-                    p.WaitForExit(1000);
+                    if (!p.WaitForExit(5000))
+                        Utils.SaveLog("Core process did not exit after Kill. PID=" + p.Id);
                 }
             }
             catch (Exception ex)
