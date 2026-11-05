@@ -16,18 +16,33 @@ namespace v2rayN.Handler
         private V2rayHandler _v2rayHandler;
         private List<int> _selecteds;
         Action<int, string> _updateFunc;
+        Action<string> _logFunc;
+
+        private void LogProgress(string message)
+        {
+            try
+            {
+                if (_logFunc != null)
+                    _logFunc("[真连接测速] " + message + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to write real-ping progress: " + ex.Message, ex);
+            }
+        }
 
         public SpeedtestHandler(ref Config config)
         {
             _config = config;
         }
 
-        public SpeedtestHandler(ref Config config, ref V2rayHandler v2rayHandler, List<int> selecteds, string actionType, Action<int, string> update)
+        public SpeedtestHandler(ref Config config, ref V2rayHandler v2rayHandler, List<int> selecteds, string actionType, Action<int, string> update, Action<string> log = null)
         {
             _config = config;
             _v2rayHandler = v2rayHandler;
             _selecteds = Utils.DeepCopy(selecteds);
             _updateFunc = update;
+            _logFunc = log;
 
             if (actionType == "ping")
             {
@@ -93,58 +108,82 @@ namespace v2rayN.Handler
         private void RunRealPing()
         {
             int pid = -1;
+            Stopwatch totalWatch = Stopwatch.StartNew();
             try
             {
-                string msg = string.Empty;
+                LogProgress("正在生成测速配置，共选择 " + _selecteds.Count + " 个节点。");
 
                 Dictionary<int, int> speedTestPorts;
+                LogProgress("正在启动临时测速内核……");
                 pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
                 if (pid < 0)
                 {
-                    _updateFunc(_selecteds[0], UIRes.I18N("OperationFailed"));
+                    string failure = UIRes.I18N("OperationFailed");
+                    LogProgress("测速内核启动失败：" + failure);
+                    if (_selecteds.Count > 0)
+                        _updateFunc(_selecteds[0], failure);
                     return;
                 }
+                LogProgress("测速内核启动成功，PID=" + pid + "。");
 
-                //Thread.Sleep(5000);
                 List<Task> tasks = new List<Task>();
                 foreach (int itemIndex in _selecteds)
                 {
                     if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
                     {
+                        LogProgress("跳过自定义配置：" + _config.vmess[itemIndex].remarks);
                         continue;
                     }
+
+                    int capturedIndex = itemIndex;
+                    string serverName = _config.vmess[capturedIndex].remarks;
                     tasks.Add(Task.Factory.StartNew(() =>
                     {
+                        Stopwatch itemWatch = Stopwatch.StartNew();
                         try
                         {
+                            LogProgress("开始测试节点：" + serverName + "。");
                             int localTestPort;
-                            if (!speedTestPorts.TryGetValue(itemIndex, out localTestPort))
+                            if (!speedTestPorts.TryGetValue(capturedIndex, out localTestPort))
                             {
-                                _updateFunc(itemIndex, "测速端口分配失败");
+                                _updateFunc(capturedIndex, "测速端口分配失败");
+                                LogProgress("节点 " + serverName + " 测速失败：测速端口分配失败。");
                                 return;
                             }
                             WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
                             int responseTime = -1;
                             string status = GetRealPingTime(_config.speedPingTestUrl, webProxy, out responseTime);
                             string output = Utils.IsNullOrEmpty(status) ? FormatOut(responseTime, "ms") : FormatOut(status, "");
-                            _updateFunc(itemIndex, output);
+                            _updateFunc(capturedIndex, output);
+                            LogProgress("节点 " + serverName + " 测试结果：" + output.Trim()
+                                + (Utils.IsNullOrEmpty(status) ? "，耗时 " + itemWatch.ElapsedMilliseconds + " ms。"
+                                    : "，失败原因：" + status + "。"));
                         }
                         catch (Exception ex)
                         {
-                            Utils.SaveLog(ex.Message, ex);
+                            _updateFunc(capturedIndex, "测速异常");
+                            Utils.SaveLog("Real ping task failed for " + serverName + ": " + ex.ToString(), ex);
+                            LogProgress("节点 " + serverName + " 测速异常：" + ex.Message);
                         }
                     }));
-                    //Thread.Sleep(100);
                 }
+                LogProgress("测速请求已发出，等待 " + tasks.Count + " 个节点返回结果。");
                 Task.WaitAll(tasks.ToArray());
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Utils.SaveLog("Real ping failed: " + ex.ToString(), ex);
+                LogProgress("测速过程发生异常：" + ex.Message);
             }
             finally
             {
-                if (pid > 0) _v2rayHandler.V2rayStopPid(pid);
+                if (pid > 0)
+                {
+                    LogProgress("正在停止临时测速内核，PID=" + pid + "。");
+                    _v2rayHandler.V2rayStopPid(pid);
+                }
+                totalWatch.Stop();
+                LogProgress("本次真连接测速结束，总耗时 " + totalWatch.ElapsedMilliseconds + " ms。");
             }
         }
 
