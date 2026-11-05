@@ -615,7 +615,7 @@ namespace v2rayN.Forms
             ConfigHandler.SaveConfig(ref config, false);
             statistics?.SaveToFile();
 
-            Thread restartThread = new Thread(delegate
+            Thread restartThread = new Thread(new ThreadStart(delegate
             {
                 bool coreReady = false;
                 Stopwatch sw = Stopwatch.StartNew();
@@ -687,7 +687,7 @@ namespace v2rayN.Forms
                         catch { }
                     }
                 }
-            });
+            }));
             restartThread.IsBackground = true;
             restartThread.Priority = ThreadPriority.AboveNormal;
             restartThread.Name = "v2rayN-CoreRestart";
