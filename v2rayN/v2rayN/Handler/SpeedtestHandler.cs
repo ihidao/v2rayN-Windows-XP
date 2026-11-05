@@ -18,16 +18,20 @@ namespace v2rayN.Handler
         Action<int, string> _updateFunc;
         Action<string> _logFunc;
 
-        private void LogProgress(string message)
+        private void LogProgress(string message, string level = "INFO")
         {
             try
             {
                 if (_logFunc != null)
-                    _logFunc("[真连接测速] " + message + Environment.NewLine);
+                {
+                    string logLine = string.Format("[{0}] [{1}] [Speedtest] {2}",
+                        DateTime.Now.ToString("HH:mm:ss"), level, message);
+                    _logFunc(logLine + Environment.NewLine);
+                }
             }
             catch (Exception ex)
             {
-                Utils.SaveLog("Unable to write real-ping progress: " + ex.Message, ex);
+                Utils.SaveLog("Speedtest", ex);
             }
         }
 
@@ -119,7 +123,7 @@ namespace v2rayN.Handler
                 if (pid < 0)
                 {
                     string failure = UIRes.I18N("OperationFailed");
-                    LogProgress("测速内核启动失败：" + failure);
+                    LogProgress("测速内核启动失败：" + failure, "ERROR");
                     if (_selecteds.Count > 0)
                         _updateFunc(_selecteds[0], failure);
                     return;
@@ -147,7 +151,7 @@ namespace v2rayN.Handler
                             if (!speedTestPorts.TryGetValue(capturedIndex, out localTestPort))
                             {
                                 _updateFunc(capturedIndex, "测速端口分配失败");
-                                LogProgress("节点 " + serverName + " 测速失败：测速端口分配失败。");
+                                LogProgress("节点 " + serverName + " 测速失败：测速端口分配失败。", "ERROR");
                                 return;
                             }
                             WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
@@ -163,7 +167,7 @@ namespace v2rayN.Handler
                         {
                             _updateFunc(capturedIndex, "测速异常");
                             Utils.SaveLog("Real ping task failed for " + serverName + ": " + ex.ToString(), ex);
-                            LogProgress("节点 " + serverName + " 测速异常：" + ex.Message);
+                            LogProgress("节点 " + serverName + " 测速异常：" + ex.Message, "ERROR");
                         }
                     }));
                 }
@@ -173,7 +177,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog("Real ping failed: " + ex.ToString(), ex);
-                LogProgress("测速过程发生异常：" + ex.Message);
+                LogProgress("测速过程发生异常：" + ex.Message, "ERROR");
             }
             finally
             {
