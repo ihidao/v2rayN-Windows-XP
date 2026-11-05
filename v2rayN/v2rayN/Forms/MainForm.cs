@@ -459,7 +459,7 @@ namespace v2rayN.Forms
                 return;
             }
 
-            Thread startupThread = new Thread(new ThreadStart(delegate
+            ThreadStart startupAction = delegate
             {
                 bool coreReady = false;
                 StatisticsHandler startupStatistics = null;
@@ -540,7 +540,8 @@ namespace v2rayN.Forms
                     }
                     catch { }
                 }
-            }));
+            };
+            Thread startupThread = new Thread(startupAction);
             startupThread.IsBackground = true;
             startupThread.Priority = ThreadPriority.AboveNormal;
             startupThread.Name = "v2rayN-CoreStartup";
