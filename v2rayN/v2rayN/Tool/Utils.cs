@@ -894,6 +894,14 @@ namespace v2rayN
             SaveLog(strTitle, ex == null ? string.Empty : ex.ToString());
         }
 
+        /// <summary>
+        /// Write detailed diagnostic text to the daily log file.
+        /// </summary>
+        public static void SaveLogDetail(string strTitle, string strContent)
+        {
+            SaveLog(strTitle, strContent);
+        }
+
         private static void SaveLog(string strTitle, string strContent)
         {
             try
