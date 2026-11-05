@@ -176,7 +176,7 @@ namespace v2rayN.Handler
                 catch (Exception ex)
                 {
                     message = String.Format(
-                        "启动内核失败：无法检查本地 UDP 端口 {0}:{1}。\\r\\n详细信息：{2}",
+                        "启动内核失败：无法检查本地 UDP 端口 {0}:{1}。\r\n详细信息：{2}",
                         listenAddress, config.inbound[0].localPort, ex.Message);
                     return true;
                 }
