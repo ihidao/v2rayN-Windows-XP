@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          # Keep the checkout path short to reduce Windows MAX_PATH problems.
+          path: s
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -25,21 +28,51 @@ jobs:
       - name: Restore NuGet packages
         shell: pwsh
         run: |
-          msbuild "v2rayN/v2rayN/v2rayN.csproj" /t:Restore /p:RestoreIgnoreFailedSources=true
+          msbuild "s/v2rayN/v2rayN/v2rayN.csproj" /t:Restore /p:RestoreIgnoreFailedSources=true
           if ($LASTEXITCODE -ne 0) { throw "NuGet restore failed" }
 
       - name: Build .NET Framework 4.0 solution
         shell: pwsh
         run: |
           $frameworkRoot = (Resolve-Path "packages/Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3/build").Path
-          msbuild "v2rayN/v2rayN/v2rayN.csproj" /m /p:Configuration=Release /p:Platform=AnyCPU /p:TargetFrameworkRootPath="$frameworkRoot" /v:minimal
+          msbuild "s/v2rayN/v2rayN/v2rayN.csproj" /m /p:Configuration=Release /p:Platform=AnyCPU /p:TargetFrameworkRootPath="$frameworkRoot" /v:minimal
           if ($LASTEXITCODE -ne 0) { throw ".NET Framework 4.0 build failed" }
 
-      - name: Upload GUI build
+      - name: Prepare shallow release package and timestamp
+        shell: pwsh
+        run: |
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE "s/v2rayN/v2rayN/bin/Release"
+          $publishDir = Join-Path $env:GITHUB_WORKSPACE "dist"
+
+          if (-not (Test-Path $buildDir -PathType Container)) {
+            throw "Build output directory not found: $buildDir"
+          }
+
+          if (Test-Path $publishDir) {
+            Remove-Item $publishDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+
+          # Copy the contents of Release, not the source-tree path.
+          # This prevents the source directory hierarchy from appearing in the downloaded ZIP.
+          Get-ChildItem -LiteralPath $buildDir -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $publishDir -Recurse -Force
+          }
+
+          if (-not (Test-Path (Join-Path $publishDir "v2rayN.exe") -PathType Leaf)) {
+            throw "v2rayN.exe was not found in the prepared release package"
+          }
+
+          # GitHub-hosted Windows runners use UTC; use one timestamp for the whole run.
+          $buildTime = (Get-Date).ToUniversalTime().ToString("yyyyMMdd_HHmmss")
+          "BUILD_TIME=$buildTime" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Prepared release directory: $publishDir"
+          Write-Host "Artifact name: v2rayN_4.20_for_XP_${buildTime}_UTC"
+
+      - name: Upload XP release package
         uses: actions/upload-artifact@v4
         with:
-          name: v2rayN_4.20_for_XP
-          path: |
-            v2rayN/v2rayN/bin/Release/**
+          name: v2rayN_4.20_for_XP_${{ env.BUILD_TIME }}_UTC
+          path: dist/**
           if-no-files-found: error
           retention-days: 14
