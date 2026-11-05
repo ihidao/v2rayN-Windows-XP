@@ -146,7 +146,7 @@ namespace v2rayN.Handler
             {
                 foreach (IPEndPoint listener in activeListeners)
                 {
-                    if (listener == null || listener.Port != port)
+                    if (listener == null || listener.Address.AddressFamily != AddressFamily.InterNetwork || listener.Port != port)
                         continue;
 
                     // 监听在 0.0.0.0 上的端点与所有 IPv4 地址冲突；
