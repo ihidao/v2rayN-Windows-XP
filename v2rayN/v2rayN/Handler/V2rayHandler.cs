@@ -444,13 +444,15 @@ namespace v2rayN.Handler
                 startupElapsedMs = totalWatch.ElapsedMilliseconds;
                 coreNameVersion = version5;
                 failure = string.Empty;
-                Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=5.x; elapsed="
-                    + startupElapsedMs + " ms; SOCKS ready.");
+                Utils.SaveLog("[CoreStartup] PID=" + p.Id
+                    + "; core=" + coreNameVersion
+                    + "; config-arg=-c; elapsed=" + startupElapsedMs
+                    + " ms; SOCKS ready.");
                 return p;
             }
 
-            Utils.SaveLog("[CoreStartup] 5.x arguments failed after " + attempt5Ms
-                + " ms; trying legacy 4.x arguments. " + error5);
+            Utils.SaveLog("[CoreStartup] config-arg=-c failed after " + attempt5Ms
+                + " ms; trying config-arg=-config. " + error5);
 
             string error4;
             long attempt4Ms;
@@ -464,14 +466,16 @@ namespace v2rayN.Handler
                 usedLegacyArguments = true;
                 coreNameVersion = version4;
                 failure = string.Empty;
-                Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=4.x fallback; elapsed="
-                    + startupElapsedMs + " ms; SOCKS ready.");
+                Utils.SaveLog("[CoreStartup] PID=" + p.Id
+                    + "; core=" + coreNameVersion
+                    + "; config-arg=-config; elapsed=" + startupElapsedMs
+                    + " ms; SOCKS ready.");
                 return p;
             }
 
-            failure = "V2Ray core failed to start with both command-line formats."
-                + Environment.NewLine + "[5.x run -c]" + Environment.NewLine + error5
-                + Environment.NewLine + "[4.x -config]" + Environment.NewLine + error4;
+            failure = "Core failed to start with both command-line formats."
+                + Environment.NewLine + "[-c]" + Environment.NewLine + error5
+                + Environment.NewLine + "[-config]" + Environment.NewLine + error4;
             return null;
         }
 
