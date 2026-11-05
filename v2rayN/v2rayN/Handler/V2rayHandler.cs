@@ -50,7 +50,11 @@ namespace v2rayN.Handler
             {
                 foreach (var inbound in config.inbound)
                 {
-                    if (inbound != null && inbound.localPort > 0 && !readinessPorts.Contains(inbound.localPort))
+                    // 系统代理依赖 SOCKS 入站；不能用其他 inbound 的端口误判核心就绪。
+                    if (inbound != null
+                        && inbound.protocol == Global.InboundSocks
+                        && inbound.localPort > 0
+                        && !readinessPorts.Contains(inbound.localPort))
                         readinessPorts.Add(inbound.localPort);
                 }
             }
@@ -253,7 +257,10 @@ namespace v2rayN.Handler
 
                 // 每 100ms 检查一次：核心监听端口一旦就绪便立即返回，
                 // 不再无条件等待完整的 1.5 秒；无端口信息时保留原超时保护。
-                for (int elapsed = 0; elapsed < 1500; elapsed += 100)
+                // 只在 SOCKS 入站端口真正开始监听后报告启动成功。
+                // XP 机器较慢时最多等待 3 秒；超时则停止这个未就绪的进程，
+                // 避免 UI 提前设置系统代理并把“进程仍存活”当作“核心可用”。
+                for (int elapsed = 0; elapsed < 3000; elapsed += 100)
                 {
                     if (p.HasExited) break;
                     if (IsAnyPortReady(ports))
@@ -266,7 +273,17 @@ namespace v2rayN.Handler
                 }
 
                 if (!p.HasExited)
-                    return p;
+                {
+                    failure = "核心进程仍在运行，但 SOCKS 入站端口在 3 秒内未就绪。";
+                    try
+                    {
+                        p.Kill();
+                        p.WaitForExit(1000);
+                    }
+                    catch { }
+                    try { p.Dispose(); } catch { }
+                    return null;
+                }
 
                 p.WaitForExit();
                 lock (errorText) failure = errorText.ToString();
