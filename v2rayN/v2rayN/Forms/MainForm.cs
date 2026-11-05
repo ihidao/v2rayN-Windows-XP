@@ -613,18 +613,41 @@ namespace v2rayN.Forms
             }
 
             ConfigHandler.SaveConfig(ref config, false);
-            statistics?.SaveToFile();
+            StatisticsHandler previousStatistics = statistics;
+            statistics = null;
+            toolSslServerSpeed.Text = "0/s↑ | 0/s↓";
 
             Thread restartThread = new Thread(new ThreadStart(delegate
             {
                 bool coreReady = false;
+                StatisticsHandler restartedStatistics = null;
                 Stopwatch sw = Stopwatch.StartNew();
                 try
                 {
+                    // Persist and stop the old poller before replacing the core.
+                    if (previousStatistics != null)
+                        previousStatistics.Close();
+
                     if (!startupExiting)
                     {
                         v2rayHandler.LoadV2ray(restartConfig, reloadConfig);
                         coreReady = v2rayHandler.IsCoreRunning;
+
+                        // A new core starts with fresh counters; use a new handler so
+                        // the first sample establishes a fresh baseline.
+                        if (coreReady && restartConfig.enableStatistics)
+                        {
+                            try
+                            {
+                                restartedStatistics = new StatisticsHandler(
+                                    restartConfig, UpdateStatisticsHandler);
+                            }
+                            catch (Exception statsEx)
+                            {
+                                Utils.SaveLog("Statistics reinitialization failed: "
+                                    + statsEx.Message, statsEx);
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -671,11 +694,19 @@ namespace v2rayN.Forms
 
                                     if (coreReady)
                                     {
+                                        if (restartedStatistics != null)
+                                        {
+                                            statistics = restartedStatistics;
+                                            statistics.UpdateUI = Visible;
+                                            RefreshServersView();
+                                            statistics.Run();
+                                        }
                                         ChangePACButtonStatus(config.sysProxyType);
                                     }
                                     else
                                     {
-                                        AppendText(false, "核心未就绪，未更新系统代理。");
+                                        statistics = null;
+                                        AppendText(false, "核心未就绪，未更新系统代理和流量统计。");
                                     }
 
                                     tsbReload.Enabled = true;
@@ -1001,11 +1032,57 @@ namespace v2rayN.Forms
 
         private void tsbOptionSetting_Click(object sender, EventArgs e)
         {
+            Config configBefore = null;
+            try
+            {
+                configBefore = Utils.FromJson<Config>(Utils.ToJson(config));
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to snapshot options before editing: " + ex.Message, ex);
+            }
+
             OptionSettingForm fm = new OptionSettingForm();
             if (fm.ShowDialog() == DialogResult.OK)
             {
                 RefreshServers();
+
+                // Logging changes do not affect the generated core configuration.
+                // Avoid restarting the core and interrupting active connections.
+                if (configBefore != null && CoreSettingsUnchanged(configBefore, config))
+                {
+                    Global.reloadV2ray = false;
+                    Utils.SaveLog("[Settings] Core configuration unchanged; core restart skipped.");
+                    return;
+                }
+
                 LoadV2ray();
+            }
+        }
+
+        private bool CoreSettingsUnchanged(Config before, Config after)
+        {
+            if (before == null || after == null)
+                return false;
+
+            try
+            {
+                Config normalizedBefore = Utils.FromJson<Config>(Utils.ToJson(before));
+                Config normalizedAfter = Utils.FromJson<Config>(Utils.ToJson(after));
+                if (normalizedBefore == null || normalizedAfter == null)
+                    return false;
+
+                // Ignore only the two logging fields when comparing saved options.
+                normalizedBefore.logEnabled = normalizedAfter.logEnabled;
+                normalizedBefore.loglevel = normalizedAfter.loglevel;
+
+                return String.Equals(Utils.ToJson(normalizedBefore),
+                    Utils.ToJson(normalizedAfter), StringComparison.Ordinal);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to compare core configuration after options change: " + ex.Message, ex);
+                return false;
             }
         }
 
@@ -1470,7 +1547,7 @@ namespace v2rayN.Forms
             });
         }
 
-        private void UpdateStatisticsHandler(ulong up, ulong down, List<ServerStatItem> statistics)
+        private void UpdateStatisticsHandler(ulong up, ulong down, List<ServerStatItem> statisticsData)
         {
             if (InvokeRequired)
             {
@@ -1478,36 +1555,44 @@ namespace v2rayN.Forms
                 {
                     BeginInvoke((MethodInvoker)delegate
                     {
-                        UpdateStatisticsHandler(up, down, statistics);
+                        UpdateStatisticsHandler(up, down, statisticsData);
                     });
                 }
                 catch { }
                 return;
             }
 
+            // Ignore a queued callback from a worker that has already been replaced.
+            if (statistics == null
+                || !Object.ReferenceEquals(statistics.Statistic, statisticsData))
+                return;
+
             try
             {
-                up /= (ulong)(config.statisticsFreshRate / 1000f);
-                down /= (ulong)(config.statisticsFreshRate / 1000f);
-                toolSslServerSpeed.Text = string.Format("{0}/s↑ | {1}/s↓", Utils.HumanFy(up), Utils.HumanFy(down));
+                int refreshRate = config.statisticsFreshRate;
+                if (refreshRate < 1000)
+                    refreshRate = 1000;
+                up = (ulong)(up / (refreshRate / 1000f));
+                down = (ulong)(down / (refreshRate / 1000f));
+                toolSslServerSpeed.Text = string.Format("{0}/s↑ | {1}/s↓",
+                    Utils.HumanFy(up), Utils.HumanFy(down));
 
-                List<string[]> datas = new List<string[]>();
-                for (int i = 0; i < config.vmess.Count; i++)
+                for (int i = 0; i < config.vmess.Count && i < lvServers.Items.Count; i++)
                 {
-                    int index = statistics.FindIndex(item_ => item_.itemId == config.vmess[i].getItemId());
+                    int index = statisticsData.FindIndex(item_ =>
+                        item_.itemId == config.vmess[i].getItemId());
                     if (index != -1)
                     {
-                        lvServers.Invoke((MethodInvoker)delegate
-                        {
-                            lvServers.BeginUpdate();
-
-                            lvServers.Items[i].SubItems["todayDown"].Text = Utils.HumanFy(statistics[index].todayDown);
-                            lvServers.Items[i].SubItems["todayUp"].Text = Utils.HumanFy(statistics[index].todayUp);
-                            lvServers.Items[i].SubItems["totalDown"].Text = Utils.HumanFy(statistics[index].totalDown);
-                            lvServers.Items[i].SubItems["totalUp"].Text = Utils.HumanFy(statistics[index].totalUp);
-
-                            lvServers.EndUpdate();
-                        });
+                        lvServers.BeginUpdate();
+                        lvServers.Items[i].SubItems["todayDown"].Text =
+                            Utils.HumanFy(statisticsData[index].todayDown);
+                        lvServers.Items[i].SubItems["todayUp"].Text =
+                            Utils.HumanFy(statisticsData[index].todayUp);
+                        lvServers.Items[i].SubItems["totalDown"].Text =
+                            Utils.HumanFy(statisticsData[index].totalDown);
+                        lvServers.Items[i].SubItems["totalUp"].Text =
+                            Utils.HumanFy(statisticsData[index].totalUp);
+                        lvServers.EndUpdate();
                     }
                 }
             }
