@@ -115,9 +115,12 @@ namespace v2rayN.Handler
             }
 
             // 当前 GUI 的 HTTP 入站端口按 SOCKS 端口 + 1 生成。
-            int httpPort = config.inbound[0].localPort + 1;
-            if (httpPort > 0 && httpPort <= 65535 && !portsToCheck.Contains(httpPort))
-                portsToCheck.Add(httpPort);
+            if (config.inbound[0] != null)
+            {
+                int httpPort = config.inbound[0].localPort + 1;
+                if (httpPort > 0 && httpPort <= 65535 && !portsToCheck.Contains(httpPort))
+                    portsToCheck.Add(httpPort);
+            }
 
             foreach (int port in portsToCheck)
             {
@@ -125,6 +128,7 @@ namespace v2rayN.Handler
                 try
                 {
                     probe = new TcpListener(listenAddress, port);
+                    probe.Server.ExclusiveAddressUse = true;
                     probe.Start();
                 }
                 catch (SocketException ex)
@@ -146,6 +150,38 @@ namespace v2rayN.Handler
                     if (probe != null)
                     {
                         try { probe.Stop(); } catch { }
+                    }
+                }
+            }
+
+            // SOCKS 入站启用 UDP 时，也检查同一端口的 UDP 绑定冲突。
+            if (config.inbound[0] != null && config.inbound[0].udpEnabled
+                && config.inbound[0].localPort > 0)
+            {
+                UdpClient udpProbe = null;
+                try
+                {
+                    udpProbe = new UdpClient(new IPEndPoint(listenAddress, config.inbound[0].localPort));
+                }
+                catch (SocketException ex)
+                {
+                    message = String.Format(
+                        "启动内核失败：本地 UDP 端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。\\r\\n详细信息：{2}",
+                        listenAddress, config.inbound[0].localPort, ex.Message);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    message = String.Format(
+                        "启动内核失败：无法检查本地 UDP 端口 {0}:{1}。\\r\\n详细信息：{2}",
+                        listenAddress, config.inbound[0].localPort, ex.Message);
+                    return true;
+                }
+                finally
+                {
+                    if (udpProbe != null)
+                    {
+                        try { udpProbe.Close(); } catch { }
                     }
                 }
             }
