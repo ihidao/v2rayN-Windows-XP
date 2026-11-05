@@ -249,49 +249,158 @@ namespace v2rayN.Handler
             _config = config;
             _updateFunc = update;
 
-            DownloadHandle downloadHandle = null;
-            if (downloadHandle == null)
+            string url = string.Format(geoUrl, geoName);
+            if (UI.ShowYesNo(string.Format(UIRes.I18N("DownloadYesNo"), url)) != DialogResult.Yes)
             {
-                downloadHandle = new DownloadHandle();
-
-                downloadHandle.UpdateCompleted += (sender2, args) =>
-                {
-                    if (args.Success)
-                    {
-                        _updateFunc(false, string.Format(UIRes.I18N("MsgDownloadGeoFileSuccessfully"), geoName));
-
-                        try
-                        {
-                            string fileName = Utils.GetPath(Global.DownloadFileName);
-                            if (File.Exists(fileName))
-                            {
-                                string targetPath = Utils.GetPath($"{geoName}.dat");
-                                if (File.Exists(targetPath))
-                                {
-                                    File.Delete(targetPath);
-                                }
-                                File.Move(fileName, targetPath);
-                                _updateFunc(true, "");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _updateFunc(false, ex.Message);
-                        }
-                    }
-                    else
-                    {
-                        _updateFunc(false, args.Msg);
-                    }
-                };
-                downloadHandle.Error += (sender2, args) =>
-                {
-                    _updateFunc(false, args.GetException().Message);
-                };
+                return;
             }
 
-            var url = string.Format(geoUrl, geoName);
-            askToDownload(downloadHandle, url);
+            // Do not use Google's availability check to decide whether GitHub
+            // should be accessed through the local proxy. Different destinations
+            // can have different reachability in the user's network.
+            int httpPort = _config.GetLocalPort(Global.InboundHttp);
+            WebProxy localProxy = httpPort > 0
+                ? new WebProxy(Global.Loopback, httpPort) : null;
+
+            string proxyTempPath = Utils.GetPath(geoName + ".dat.proxy.tmp");
+            string directTempPath = Utils.GetPath(geoName + ".dat.direct.tmp");
+
+            try
+            {
+                if (File.Exists(proxyTempPath))
+                    File.Delete(proxyTempPath);
+                if (File.Exists(directTempPath))
+                    File.Delete(directTempPath);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("GeoIP temporary-file cleanup failed: " + ex.Message, ex);
+            }
+
+            if (localProxy != null)
+            {
+                Utils.SaveLog("Geo file download: trying local HTTP proxy, port=" + httpPort);
+                DownloadGeoFileAttempt(geoName, url, localProxy, proxyTempPath, directTempPath, true);
+            }
+            else
+            {
+                Utils.SaveLog("Geo file download: no local HTTP inbound configured; trying direct connection.");
+                DownloadGeoFileAttempt(geoName, url, null, directTempPath, directTempPath, false);
+            }
+        }
+
+        private void DownloadGeoFileAttempt(string geoName, string url, WebProxy proxy,
+            string downloadPath, string directTempPath, bool retryDirect)
+        {
+            DownloadHandle downloadHandle = new DownloadHandle();
+            downloadHandle.UpdateCompleted += (sender, args) =>
+            {
+                if (args.Success)
+                {
+                    try
+                    {
+                        if (!File.Exists(downloadPath) || new FileInfo(downloadPath).Length <= 0)
+                            throw new IOException("Geo file download completed but the temporary file is empty.");
+
+                        string targetPath = Utils.GetPath(geoName + ".dat");
+                        ReplaceGeoFileSafely(downloadPath, targetPath);
+                        Utils.SaveLog("Geo file downloaded successfully: " + geoName
+                            + (proxy == null ? " (direct)" : " (local HTTP proxy)"));
+                        _updateFunc(false, string.Format(UIRes.I18N("MsgDownloadGeoFileSuccessfully"), geoName));
+                        _updateFunc(true, "");
+                    }
+                    catch (Exception ex)
+                    {
+                        Utils.SaveLog("Geo file installation failed: " + ex.Message, ex);
+                        _updateFunc(false, ex.Message);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(args.Msg)
+                    && !string.Equals(args.Msg, UIRes.I18N("Downloading"), StringComparison.Ordinal)
+                    && !args.Msg.StartsWith("...", StringComparison.Ordinal))
+                {
+                    _updateFunc(false, args.Msg);
+                }
+            };
+
+            downloadHandle.Error += (sender, args) =>
+            {
+                Exception error = args.GetException();
+                Utils.SaveLog("Geo file download failed (" + (proxy == null ? "direct" : "local HTTP proxy")
+                    + "): " + error.Message, error);
+
+                if (retryDirect)
+                {
+                    _updateFunc(false, "通过本地代理下载 Geo 文件失败，正在尝试直连...");
+                    try
+                    {
+                        if (File.Exists(directTempPath))
+                            File.Delete(directTempPath);
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        Utils.SaveLog(cleanupException.Message, cleanupException);
+                    }
+                    DownloadGeoFileAttempt(geoName, url, null, directTempPath, directTempPath, false);
+                }
+                else
+                {
+                    _updateFunc(false, "Geo 文件下载失败（代理和直连均未成功）：" + error.Message);
+                }
+            };
+
+            downloadHandle.DownloadFileAsync(url, proxy, 600, downloadPath, false);
+        }
+
+        private void ReplaceGeoFileSafely(string downloadedPath, string targetPath)
+        {
+            string backupPath = targetPath + ".bak";
+            bool movedOriginal = false;
+
+            try
+            {
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+
+                if (File.Exists(targetPath))
+                {
+                    File.Move(targetPath, backupPath);
+                    movedOriginal = true;
+                }
+
+                File.Move(downloadedPath, targetPath);
+
+                if (movedOriginal && File.Exists(backupPath))
+                    File.Delete(backupPath);
+            }
+            catch
+            {
+                // Restore the previous working file if installing the new one fails.
+                try
+                {
+                    if (File.Exists(targetPath))
+                        File.Delete(targetPath);
+                    if (movedOriginal && File.Exists(backupPath))
+                        File.Move(backupPath, targetPath);
+                }
+                catch (Exception restoreException)
+                {
+                    Utils.SaveLog("Geo file rollback failed: " + restoreException.Message, restoreException);
+                }
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(downloadedPath))
+                        File.Delete(downloadedPath);
+                }
+                catch (Exception cleanupException)
+                {
+                    Utils.SaveLog(cleanupException.Message, cleanupException);
+                }
+            }
         }
 
         #region private
