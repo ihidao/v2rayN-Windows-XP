@@ -72,6 +72,14 @@ namespace v2rayN.Handler
 
             if (reloadConfig)
             {
+                string conflict;
+                if (FindInboundPortConflict(config, out conflict))
+                {
+                    ShowMsg(false, conflict);
+                    Utils.SaveLog(conflict);
+                    return;
+                }
+
                 string fileName = Utils.GetPath(v2rayConfigRes);
                 string msg;
                 if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
@@ -84,6 +92,64 @@ namespace v2rayN.Handler
                     V2rayRestart();
                 }
             }
+        }
+
+        /// <summary>
+        /// 启动前检查本程序实际使用的本地 TCP 入站端口是否已被占用。
+        /// 这里只做预检，不会终止或修改占用端口的其他程序。
+        /// </summary>
+        private bool FindInboundPortConflict(Config config, out string message)
+        {
+            message = String.Empty;
+            if (config == null || config.inbound == null || config.inbound.Count == 0)
+                return false;
+
+            IPAddress listenAddress = config.allowLANConn ? IPAddress.Any : IPAddress.Loopback;
+            List<int> portsToCheck = new List<int>();
+            foreach (var inbound in config.inbound)
+            {
+                if (inbound == null || inbound.localPort <= 0)
+                    continue;
+                if (!portsToCheck.Contains(inbound.localPort))
+                    portsToCheck.Add(inbound.localPort);
+            }
+
+            // 当前 GUI 的 HTTP 入站端口按 SOCKS 端口 + 1 生成。
+            int httpPort = config.inbound[0].localPort + 1;
+            if (httpPort > 0 && httpPort <= 65535 && !portsToCheck.Contains(httpPort))
+                portsToCheck.Add(httpPort);
+
+            foreach (int port in portsToCheck)
+            {
+                TcpListener probe = null;
+                try
+                {
+                    probe = new TcpListener(listenAddress, port);
+                    probe.Start();
+                }
+                catch (SocketException ex)
+                {
+                    message = String.Format(
+                        "启动内核失败：本地端口 {0}:{1} 已被占用或无法监听。请关闭占用该端口的程序，或修改 v2rayN 本地入站端口。\r\n详细信息：{2}",
+                        listenAddress, port, ex.Message);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    message = String.Format(
+                        "启动内核失败：无法检查本地端口 {0}:{1}。\r\n详细信息：{2}",
+                        listenAddress, port, ex.Message);
+                    return true;
+                }
+                finally
+                {
+                    if (probe != null)
+                    {
+                        try { probe.Stop(); } catch { }
+                    }
+                }
+            }
+            return false;
         }
 
         public int LoadV2rayConfigString(Config config, List<int> selecteds,
