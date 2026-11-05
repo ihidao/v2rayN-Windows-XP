@@ -1151,7 +1151,7 @@
     <value>355, 22</value>
   </data>
   <data name="tsbAbout.Text" xml:space="preserve">
-    <value>v2rayN Project</value>
+    <value>v2ray for XP Project</value>
   </data>
   <data name="scMain.TabIndex" type="System.Int32, mscorlib">
     <value>0</value>
