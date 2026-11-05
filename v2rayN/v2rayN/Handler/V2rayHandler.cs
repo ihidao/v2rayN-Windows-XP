@@ -442,6 +442,7 @@ namespace v2rayN.Handler
             {
                 totalWatch.Stop();
                 startupElapsedMs = totalWatch.ElapsedMilliseconds;
+                coreNameVersion = version5;
                 failure = string.Empty;
                 Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=5.x; elapsed="
                     + startupElapsedMs + " ms; SOCKS ready.");
@@ -461,6 +462,7 @@ namespace v2rayN.Handler
             if (p != null)
             {
                 usedLegacyArguments = true;
+                coreNameVersion = version4;
                 failure = string.Empty;
                 Utils.SaveLog("[CoreStartup] PID=" + p.Id + "; mode=4.x fallback; elapsed="
                     + startupElapsedMs + " ms; SOCKS ready.");
@@ -521,8 +523,9 @@ namespace v2rayN.Handler
                 string failure;
                 long startupElapsedMs;
                 bool usedLegacyArguments;
+                string coreNameVersion;
                 p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure,
-                    out startupElapsedMs, out usedLegacyArguments);
+                    out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
                     throw new Exception("V2Ray speed-test core failed to start. " + failure);
 
