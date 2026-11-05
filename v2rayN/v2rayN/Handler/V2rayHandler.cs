@@ -216,15 +216,15 @@ namespace v2rayN.Handler
             return string.Empty;
         }
 
-        // Detect the core CLI once during the first UI startup, before launching it.
-        // Cache the result so reloads and speed tests do not spawn extra probe processes.
-        // Try the V2Ray 5.x command line first, then fall back to the 4.x syntax.
-        // A process that remains alive for the startup check is considered started.
+        // Wait for the core's own startup message, then briefly verify the SOCKS listener.
+        // Both output streams are consumed asynchronously to avoid pipe deadlocks.
         private Process TryStartCore(string fileName, string arguments, List<int> ports, out string failure)
         {
             failure = string.Empty;
             Process p = new Process();
             StringBuilder errorText = new StringBuilder();
+            object startupLock = new object();
+            bool startedMessageSeen = false;
             p.StartInfo = new ProcessStartInfo
             {
                 FileName = fileName,
@@ -236,16 +236,27 @@ namespace v2rayN.Handler
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8
             };
-            p.OutputDataReceived += (sender, e) =>
+
+            DataReceivedEventHandler outputHandler = (sender, e) =>
             {
-                if (!String.IsNullOrEmpty(e.Data))
-                    ShowMsg(false, e.Data + Environment.NewLine);
+                if (String.IsNullOrEmpty(e.Data)) return;
+                ShowMsg(false, e.Data + Environment.NewLine);
+                if (IsCoreStartedMessage(e.Data))
+                {
+                    lock (startupLock) startedMessageSeen = true;
+                }
             };
-            p.ErrorDataReceived += (sender, e) =>
+            DataReceivedEventHandler errorHandler = (sender, e) =>
             {
-                if (!String.IsNullOrEmpty(e.Data))
-                    lock (errorText) errorText.AppendLine(e.Data);
+                if (String.IsNullOrEmpty(e.Data)) return;
+                lock (errorText) errorText.AppendLine(e.Data);
+                if (IsCoreStartedMessage(e.Data))
+                {
+                    lock (startupLock) startedMessageSeen = true;
+                }
             };
+            p.OutputDataReceived += outputHandler;
+            p.ErrorDataReceived += errorHandler;
 
             try
             {
@@ -255,26 +266,50 @@ namespace v2rayN.Handler
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
-                // 每 100ms 检查一次：核心监听端口一旦就绪便立即返回，
-                // 不再无条件等待完整的 1.5 秒；无端口信息时保留原超时保护。
-                // 只在 SOCKS 入站端口真正开始监听后报告启动成功。
-                // XP 机器较慢时最多等待 3 秒；超时则停止这个未就绪的进程，
-                // 避免 UI 提前设置系统代理并把“进程仍存活”当作“核心可用”。
-                for (int elapsed = 0; elapsed < 3000; elapsed += 100)
+                // XP hardware may be slow. Allow up to 10 seconds for the core's
+                // explicit startup message; an early process exit fails immediately.
+                bool started = false;
+                for (int elapsed = 0; elapsed < 10000; elapsed += 100)
                 {
                     if (p.HasExited) break;
-                    if (IsAnyPortReady(ports))
-                    {
-                        // 避免把其它程序占用的同一端口误判为本核心已就绪。
-                        if (p.WaitForExit(100)) break;
-                        return p;
-                    }
+
+                    lock (startupLock) started = startedMessageSeen;
+                    if (started) break;
+
                     if (p.WaitForExit(100)) break;
+                }
+
+                if (!p.HasExited && started)
+                {
+                    ShowMsg(false, "检测到内核启动成功提示，正在验证 SOCKS 入站端口..." + Environment.NewLine);
+
+                    // The startup message is the primary signal. Verify the configured
+                    // SOCKS listener for up to 2 more seconds before enabling the proxy.
+                    if (ports == null || ports.Count == 0)
+                        return p;
+
+                    for (int elapsed = 0; elapsed < 2000; elapsed += 100)
+                    {
+                        if (p.HasExited) break;
+                        if (IsAnyPortReady(ports))
+                        {
+                            if (!p.WaitForExit(100))
+                            {
+                                ShowMsg(false, "内核启动提示与 SOCKS 端口检查均通过。" + Environment.NewLine);
+                                return p;
+                            }
+                            break;
+                        }
+                        if (p.WaitForExit(100)) break;
+                    }
                 }
 
                 if (!p.HasExited)
                 {
-                    failure = "核心进程仍在运行，但 SOCKS 入站端口在 3 秒内未就绪。";
+                    lock (startupLock) started = startedMessageSeen;
+                    failure = started
+                        ? "内核已输出启动成功提示，但 SOCKS 入站端口在 2 秒内未就绪。"
+                        : "内核进程仍在运行，但在 10 秒内未输出启动成功提示。";
                     try
                     {
                         p.Kill();
@@ -299,6 +334,14 @@ namespace v2rayN.Handler
                 try { p.Dispose(); } catch { }
                 return null;
             }
+        }
+
+        private bool IsCoreStartedMessage(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+            return line.IndexOf("started", StringComparison.OrdinalIgnoreCase) >= 0
+                && (line.IndexOf("V2Ray", StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("Xray", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private bool IsAnyPortReady(List<int> ports)
