@@ -364,7 +364,8 @@
             // 
             resources.ApplyResources(this.tsbTestMe, "tsbTestMe");
             this.tsbTestMe.Name = "tsbTestMe";
-            this.tsbTestMe.Click += new System.EventHandler(this.tsbTestMe_Click);
+            this.tsbTestMe.Visible = false;
+            this.tsbTestMe.Enabled = false;
             // 
             // menuClearServerStatistics
             // 
