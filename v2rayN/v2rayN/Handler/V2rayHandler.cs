@@ -270,6 +270,9 @@ namespace v2rayN.Handler
                     throw new Exception("Process.Start returned false.");
 
                 startupWatch.Start();
+                Utils.SaveLog("[CoreStartup] Process created; PID=" + p.Id
+                    + "; time=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                    + "; arguments=" + arguments);
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
@@ -288,8 +291,6 @@ namespace v2rayN.Handler
 
                 if (!p.HasExited && started)
                 {
-                    ShowMsg(false, "检测到内核启动成功提示，正在验证 SOCKS 入站端口..." + Environment.NewLine);
-
                     // The startup message is the primary signal. Verify the configured
                     // SOCKS listener for up to 2 more seconds before enabling the proxy.
                     if (ports == null || ports.Count == 0)
