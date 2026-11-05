@@ -442,7 +442,7 @@ namespace v2rayN.Forms
             bool reloadConfig = Global.reloadV2ray;
             Global.reloadV2ray = false;
 
-            if (Global.reloadV2ray)
+            if (reloadConfig)
             {
                 ClearMsg();
             }
@@ -461,6 +461,7 @@ namespace v2rayN.Forms
             {
                 Utils.SaveLog("Initial core startup cancelled: config snapshot could not be created.");
                 AppendText(false, "启动配置快照创建失败，已取消后台启动。");
+                coreRestartInProgress = false;
                 tsbReload.Enabled = true;
                 return;
             }
@@ -523,23 +524,19 @@ namespace v2rayN.Forms
                                 coreRestartInProgress = false;
                                 ConfigHandler.SaveConfig(ref config, false);
 
-                                if (coreReady)
+                                if (coreReady && startupStatistics != null)
                                 {
-                                    // 核心监听就绪后才应用系统代理；统计对象此时才交给 UI。
-                                    if (startupStatistics != null)
-                                    {
-                                        statistics = startupStatistics;
-                                        statistics.UpdateUI = Visible;
-                                        RefreshServersView();
-                                        statistics.Run();
-                                    }
+                                    // 核心监听就绪后才交接统计对象。
+                                    statistics = startupStatistics;
+                                    statistics.UpdateUI = Visible;
+                                    RefreshServersView();
+                                    statistics.Run();
                                 }
-                                else
+                                else if (!coreReady)
                                 {
                                     AppendText(false, "核心未就绪，暂不启用系统代理和流量统计。");
                                 }
 
-                                coreRestartInProgress = false;
                                 tsbReload.Enabled = true;
                                 if (coreRestartPending)
                                 {
@@ -548,6 +545,12 @@ namespace v2rayN.Forms
                                     pendingReloadConfig = false;
                                     Global.reloadV2ray = Global.reloadV2ray || reloadAgain;
                                     LoadV2ray();
+                                    return;
+                                }
+
+                                if (coreReady)
+                                {
+                                    ChangePACButtonStatus(config.sysProxyType);
                                 }
                             });
                         }
