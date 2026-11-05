@@ -87,6 +87,15 @@ namespace v2rayN.Handler
                 // 否则旧核心仍占用 SOCKS/HTTP 端口，会被误判为外部端口冲突。
                 V2rayStop();
 
+                // Do not start a second core while the previous process is still alive.
+                if (IsCoreRunning)
+                {
+                    string stopMessage = "旧内核进程尚未完全退出，已取消本次启动。请稍后重试。";
+                    ShowMsg(false, stopMessage);
+                    Utils.SaveLog(stopMessage);
+                    return;
+                }
+
                 string conflict;
                 if (FindInboundPortConflict(config, out conflict))
                 {
