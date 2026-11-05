@@ -64,12 +64,6 @@ namespace v2rayN.Forms
             v2rayHandler = new V2rayHandler();
             v2rayHandler.ProcessEvent += v2rayHandler_ProcessEvent;
 
-            if (config.enableStatistics)
-            {
-                startupWatch.Restart();
-                statistics = new StatisticsHandler(config, UpdateStatisticsHandler);
-                Utils.SaveLog("[Startup] Statistics data initialization: " + startupWatch.ElapsedMilliseconds + " ms");
-            }
         }
 
         private void MainForm_VisibleChanged(object sender, EventArgs e)
@@ -235,8 +229,9 @@ namespace v2rayN.Forms
             lvServers.Columns.Add(UIRes.I18N("LvSubscription"), 50);
             lvServers.Columns.Add(UIRes.I18N("LvTestResults"), 70, HorizontalAlignment.Right);
 
-            if (statistics != null && statistics.Enable)
+            if (config.enableStatistics)
             {
+                // 统计列先按配置创建；统计数据文件在核心启动后再后台读取。
                 lvServers.Columns.Add(UIRes.I18N("LvTodayDownloadDataAmount"), 70);
                 lvServers.Columns.Add(UIRes.I18N("LvTodayUploadDataAmount"), 70);
                 lvServers.Columns.Add(UIRes.I18N("LvTotalDownloadDataAmount"), 70);
@@ -462,6 +457,7 @@ namespace v2rayN.Forms
             ThreadPool.QueueUserWorkItem(delegate
             {
                 bool coreReady = false;
+                StatisticsHandler startupStatistics = null;
                 Stopwatch sw = Stopwatch.StartNew();
                 try
                 {
@@ -470,6 +466,23 @@ namespace v2rayN.Forms
                         v2rayHandler.LoadV2ray(startupConfig);
                         Global.reloadV2ray = false;
                         coreReady = v2rayHandler.IsCoreRunning;
+
+                        // 统计数据文件读取和轮询线程都放到核心启动之后。
+                        if (coreReady && startupConfig.enableStatistics)
+                        {
+                            Stopwatch statsWatch = Stopwatch.StartNew();
+                            try
+                            {
+                                startupStatistics = new StatisticsHandler(startupConfig, UpdateStatisticsHandler);
+                            }
+                            catch (Exception statsEx)
+                            {
+                                Utils.SaveLog("Statistics initialization failed: " + statsEx.Message, statsEx);
+                            }
+                            statsWatch.Stop();
+                            Utils.SaveLog("[Startup] Statistics data initialization: "
+                                + statsWatch.ElapsedMilliseconds + " ms");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -498,13 +511,18 @@ namespace v2rayN.Forms
                                 if (startupExiting || IsDisposed) return;
 
                                 ConfigHandler.SaveConfig(ref config, false);
-                                statistics?.SaveToFile();
 
                                 if (coreReady)
                                 {
-                                    // 核心监听就绪后才应用系统代理并启动统计轮询。
+                                    // 核心监听就绪后才应用系统代理；统计对象此时才交给 UI。
                                     ChangePACButtonStatus(config.sysProxyType);
-                                    statistics?.Run();
+                                    if (startupStatistics != null)
+                                    {
+                                        statistics = startupStatistics;
+                                        statistics.UpdateUI = Visible;
+                                        RefreshServersView();
+                                        statistics.Run();
+                                    }
                                 }
                                 else
                                 {
@@ -1172,6 +1190,19 @@ namespace v2rayN.Forms
 
         private void UpdateStatisticsHandler(ulong up, ulong down, List<ServerStatItem> statistics)
         {
+            if (InvokeRequired)
+            {
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        UpdateStatisticsHandler(up, down, statistics);
+                    });
+                }
+                catch { }
+                return;
+            }
+
             try
             {
                 up /= (ulong)(config.statisticsFreshRate / 1000f);
