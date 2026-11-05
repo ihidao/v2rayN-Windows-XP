@@ -316,6 +316,12 @@ namespace v2rayN.Handler
                     }
                 }
                 else if (!string.IsNullOrEmpty(args.Msg)
+                    && args.Msg.StartsWith("测速失败", StringComparison.Ordinal))
+                {
+                    HandleGeoFileDownloadFailure(geoName, url, proxy, directTempPath,
+                        retryDirect, new IOException(args.Msg));
+                }
+                else if (!string.IsNullOrEmpty(args.Msg)
                     && !string.Equals(args.Msg, UIRes.I18N("Downloading"), StringComparison.Ordinal)
                     && !args.Msg.StartsWith("...", StringComparison.Ordinal))
                 {
@@ -325,31 +331,39 @@ namespace v2rayN.Handler
 
             downloadHandle.Error += (sender, args) =>
             {
-                Exception error = args.GetException();
-                Utils.SaveLog("Geo file download failed (" + (proxy == null ? "direct" : "local HTTP proxy")
-                    + "): " + error.Message, error);
-
-                if (retryDirect)
-                {
-                    _updateFunc(false, "通过本地代理下载 Geo 文件失败，正在尝试直连...");
-                    try
-                    {
-                        if (File.Exists(directTempPath))
-                            File.Delete(directTempPath);
-                    }
-                    catch (Exception cleanupException)
-                    {
-                        Utils.SaveLog(cleanupException.Message, cleanupException);
-                    }
-                    DownloadGeoFileAttempt(geoName, url, null, directTempPath, directTempPath, false);
-                }
-                else
-                {
-                    _updateFunc(false, "Geo 文件下载失败（代理和直连均未成功）：" + error.Message);
-                }
+                HandleGeoFileDownloadFailure(geoName, url, proxy, directTempPath,
+                    retryDirect, args.GetException());
             };
 
             downloadHandle.DownloadFileAsync(url, proxy, 600, downloadPath, false);
+        }
+
+
+
+        private void HandleGeoFileDownloadFailure(string geoName, string url, WebProxy proxy,
+            string directTempPath, bool retryDirect, Exception error)
+        {
+            Utils.SaveLog("Geo file download failed (" + (proxy == null ? "direct" : "local HTTP proxy")
+                + "): " + error.Message, error);
+
+            if (retryDirect)
+            {
+                _updateFunc(false, "通过本地代理下载 Geo 文件失败，正在尝试直连...");
+                try
+                {
+                    if (File.Exists(directTempPath))
+                        File.Delete(directTempPath);
+                }
+                catch (Exception cleanupException)
+                {
+                    Utils.SaveLog(cleanupException.Message, cleanupException);
+                }
+                DownloadGeoFileAttempt(geoName, url, null, directTempPath, directTempPath, false);
+            }
+            else
+            {
+                _updateFunc(false, "Geo 文件下载失败（代理和直连均未成功）：" + error.Message);
+            }
         }
 
         private void ReplaceGeoFileSafely(string downloadedPath, string targetPath)
