@@ -80,14 +80,29 @@ namespace v2rayN.Forms
 
         private void MainForm_Shown(object sender, EventArgs e)
         {
-            InitServersView();
-            RefreshServers();
-            RefreshRoutingsMenu();
-            RestoreUI();
-
+            // 先启动后台核心；列表和路由菜单放到首次显示后的消息循环中构建。
             StartInitialV2ray();
             HideForm();
 
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (startupExiting || IsDisposed) return;
+                    Stopwatch sw = Stopwatch.StartNew();
+                    InitServersView();
+                    RefreshServers();
+                    RefreshRoutingsMenu();
+                    RestoreUI();
+                    sw.Stop();
+                    Utils.SaveLog("[Startup] UI server/routing initialization: "
+                        + sw.ElapsedMilliseconds + " ms");
+                });
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Deferred UI initialization failed: " + ex.Message, ex);
+            }
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -126,8 +141,9 @@ namespace v2rayN.Forms
             try
             {
                 startupExiting = true;
-                startupDone.WaitOne(5000, false);
-                v2rayHandler.V2rayStop();
+                // 不在 UI 线程等待后台启动；若启动过程随后完成，worker 的 finally 会再次停止核心。
+                if (v2rayHandler != null)
+                    v2rayHandler.V2rayStop();
 
                 //HttpProxyHandle.CloseHttpAgent(config);
                 if (blWindowsShutDown)
@@ -412,23 +428,38 @@ namespace v2rayN.Forms
         {
             tsbReload.Enabled = false;
             startupExiting = false;
-            startupDone.Reset();
 
             if (Global.reloadV2ray)
             {
                 ClearMsg();
             }
 
+            // 后台线程只读取启动快照，避免与窗体上的服务器/路由编辑操作并发访问同一 Config。
+            Config startupConfig = null;
+            try
+            {
+                startupConfig = Utils.FromJson<Config>(Utils.ToJson(config));
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to create startup config snapshot: " + ex.Message, ex);
+            }
+            if (startupConfig == null)
+            {
+                startupConfig = config;
+            }
+
             ThreadPool.QueueUserWorkItem(delegate
             {
+                bool coreReady = false;
+                Stopwatch sw = Stopwatch.StartNew();
                 try
                 {
                     if (!startupExiting)
                     {
-                        v2rayHandler.LoadV2ray(config);
+                        v2rayHandler.LoadV2ray(startupConfig);
                         Global.reloadV2ray = false;
-                        ConfigHandler.SaveConfig(ref config, false);
-                        statistics?.SaveToFile();
+                        coreReady = v2rayHandler.IsCoreRunning;
                     }
                 }
                 catch (Exception ex)
@@ -438,6 +469,16 @@ namespace v2rayN.Forms
                 }
                 finally
                 {
+                    sw.Stop();
+                    Utils.SaveLog("[Startup] background core initialization: "
+                        + sw.ElapsedMilliseconds + " ms; ready=" + coreReady);
+
+                    if (startupExiting)
+                    {
+                        // 处理退出与 Process.Start 同时发生的竞态，确保不会遗留刚启动的核心。
+                        try { v2rayHandler.V2rayStop(); } catch { }
+                    }
+
                     startupDone.Set();
                     try
                     {
@@ -446,10 +487,22 @@ namespace v2rayN.Forms
                             BeginInvoke((MethodInvoker)delegate
                             {
                                 if (startupExiting || IsDisposed) return;
-                                ChangePACButtonStatus(config.sysProxyType);
+
+                                ConfigHandler.SaveConfig(ref config, false);
+                                statistics?.SaveToFile();
+
+                                if (coreReady)
+                                {
+                                    // 核心监听就绪后才应用系统代理并启动统计轮询。
+                                    ChangePACButtonStatus(config.sysProxyType);
+                                    statistics?.Run();
+                                }
+                                else
+                                {
+                                    AppendText(false, "核心未就绪，暂不启用系统代理和流量统计。");
+                                }
+
                                 tsbReload.Enabled = true;
-                                // 统计线程延迟到核心启动流程结束后再运行。
-                                statistics?.Run();
                             });
                         }
                     }
@@ -959,6 +1012,13 @@ namespace v2rayN.Forms
         {
             try
             {
+                if (txtMsgBox.InvokeRequired)
+                {
+                    // 不让核心输出线程同步等待 UI，避免启动/退出期间互相阻塞。
+                    BeginInvoke((MethodInvoker)delegate { AppendText(notify, msg); });
+                    return;
+                }
+
                 AppendText(msg);
                 if (notify)
                 {
