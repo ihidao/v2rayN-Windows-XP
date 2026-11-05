@@ -1272,7 +1272,7 @@ namespace v2rayN.Forms
         }
 
         /// <summary>
-        /// 按设置的日志等级过滤内核日志。未标注等级的 GUI 操作提示不受影响。
+        /// 按设置的日志等级过滤统一格式化后的日志；GUI 操作提示也使用 Info 等级。
         /// </summary>
         private bool ShouldShowLogLevelLine(string line)
         {
