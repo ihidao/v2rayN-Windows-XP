@@ -23,6 +23,10 @@ namespace v2rayN.Forms
         private StatisticsHandler statistics = null;
         private string MsgFilter = string.Empty;
         private volatile bool startupExiting;
+        // Serializes initial startup and later core restarts without blocking the UI thread.
+        private bool coreRestartInProgress;
+        private bool coreRestartPending;
+        private bool pendingReloadConfig;
 
         #region Window 事件
 
@@ -434,6 +438,9 @@ namespace v2rayN.Forms
         {
             tsbReload.Enabled = false;
             startupExiting = false;
+            coreRestartInProgress = true;
+            bool reloadConfig = Global.reloadV2ray;
+            Global.reloadV2ray = false;
 
             if (Global.reloadV2ray)
             {
@@ -467,8 +474,7 @@ namespace v2rayN.Forms
                 {
                     if (!startupExiting)
                     {
-                        v2rayHandler.LoadV2ray(startupConfig);
-                        Global.reloadV2ray = false;
+                        v2rayHandler.LoadV2ray(startupConfig, reloadConfig);
                         coreReady = v2rayHandler.IsCoreRunning;
 
                         // 统计数据文件读取和轮询线程都放到核心启动之后。
@@ -514,12 +520,12 @@ namespace v2rayN.Forms
                             {
                                 if (startupExiting || IsDisposed) return;
 
+                                coreRestartInProgress = false;
                                 ConfigHandler.SaveConfig(ref config, false);
 
                                 if (coreReady)
                                 {
                                     // 核心监听就绪后才应用系统代理；统计对象此时才交给 UI。
-                                    ChangePACButtonStatus(config.sysProxyType);
                                     if (startupStatistics != null)
                                     {
                                         statistics = startupStatistics;
@@ -533,7 +539,16 @@ namespace v2rayN.Forms
                                     AppendText(false, "核心未就绪，暂不启用系统代理和流量统计。");
                                 }
 
+                                coreRestartInProgress = false;
                                 tsbReload.Enabled = true;
+                                if (coreRestartPending)
+                                {
+                                    bool reloadAgain = pendingReloadConfig;
+                                    coreRestartPending = false;
+                                    pendingReloadConfig = false;
+                                    Global.reloadV2ray = Global.reloadV2ray || reloadAgain;
+                                    LoadV2ray();
+                                }
                             });
                         }
                     }
@@ -549,24 +564,129 @@ namespace v2rayN.Forms
         }
 
         /// <summary>
-        /// 载入V2ray
+        /// Reload the core on a worker thread so core shutdown/startup never blocks
+        /// the WinForms message loop. Configuration is snapshotted on the UI thread.
         /// </summary>
         private void LoadV2ray()
         {
-            tsbReload.Enabled = false;
-
-            if (Global.reloadV2ray)
+            if (InvokeRequired)
             {
-                ClearMsg();
+                try { BeginInvoke((MethodInvoker)delegate { LoadV2ray(); }); } catch { }
+                return;
             }
-            v2rayHandler.LoadV2ray(config);
+            if (startupExiting || IsDisposed) return;
+
+            // Initial startup and reloads share one handler/process instance. Queue a
+            // single follow-up reload instead of allowing concurrent process operations.
+            if (coreRestartInProgress)
+            {
+                coreRestartPending = true;
+                pendingReloadConfig = pendingReloadConfig || Global.reloadV2ray;
+                return;
+            }
+
+            coreRestartInProgress = true;
+            tsbReload.Enabled = false;
+            bool reloadConfig = Global.reloadV2ray;
             Global.reloadV2ray = false;
+            if (reloadConfig) ClearMsg();
+
+            Config restartConfig = null;
+            try
+            {
+                restartConfig = Utils.FromJson<Config>(Utils.ToJson(config));
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Unable to create core restart config snapshot: " + ex.Message, ex);
+            }
+
+            if (restartConfig == null)
+            {
+                coreRestartInProgress = false;
+                tsbReload.Enabled = true;
+                AppendText(false, "重启配置快照创建失败，已取消内核重启。");
+                return;
+            }
+
             ConfigHandler.SaveConfig(ref config, false);
             statistics?.SaveToFile();
 
-            ChangePACButtonStatus(config.sysProxyType);
+            Thread restartThread = new Thread(delegate
+            {
+                bool coreReady = false;
+                Stopwatch sw = Stopwatch.StartNew();
+                try
+                {
+                    if (!startupExiting)
+                    {
+                        v2rayHandler.LoadV2ray(restartConfig, reloadConfig);
+                        coreReady = v2rayHandler.IsCoreRunning;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Utils.SaveLog("Core restart failed: " + ex.Message, ex);
+                    AppendText(false, "内核重启失败: " + ex.Message);
+                }
+                finally
+                {
+                    sw.Stop();
+                    Utils.SaveLog("[CoreRestart] background restart: "
+                        + sw.ElapsedMilliseconds + " ms; ready=" + coreReady);
 
-            tsbReload.Enabled = true;
+                    if (startupExiting)
+                    {
+                        try { v2rayHandler.V2rayStop(); } catch { }
+                        return;
+                    }
+
+                    try
+                    {
+                        if (!IsDisposed && IsHandleCreated)
+                        {
+                            BeginInvoke((MethodInvoker)delegate
+                            {
+                                if (startupExiting || IsDisposed) return;
+
+                                coreRestartInProgress = false;
+                                ConfigHandler.SaveConfig(ref config, false);
+
+                                // If another operation changed settings while this restart
+                                // was running, restart once more using the newest snapshot.
+                                if (coreRestartPending)
+                                {
+                                    bool reloadAgain = pendingReloadConfig;
+                                    coreRestartPending = false;
+                                    pendingReloadConfig = false;
+                                    Global.reloadV2ray = Global.reloadV2ray || reloadAgain;
+                                    LoadV2ray();
+                                    return;
+                                }
+
+                                if (coreReady)
+                                {
+                                    ChangePACButtonStatus(config.sysProxyType);
+                                }
+                                else
+                                {
+                                    AppendText(false, "核心未就绪，未更新系统代理。");
+                                }
+
+                                tsbReload.Enabled = true;
+                                Invalidate(true);
+                                Update();
+                            });
+                        }
+                    }
+                    catch { }
+                }
+            });
+            restartThread.IsBackground = true;
+            restartThread.Priority = ThreadPriority.AboveNormal;
+            restartThread.Name = "v2rayN-CoreRestart";
+            restartThread.Start();
+            Utils.SaveLog("[CoreRestart] Core restart worker started (AboveNormal).");
         }
 
         /// <summary>
