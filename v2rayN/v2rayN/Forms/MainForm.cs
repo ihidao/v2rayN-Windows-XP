@@ -29,9 +29,14 @@ namespace v2rayN.Forms
         public MainForm()
         {
             InitializeComponent();
+
+            // Show a usable tray icon immediately; do not wait for the core to become ready.
+            notifyMain.Icon = this.Icon ?? SystemIcons.Application;
+            notifyMain.Text = "v2rayN 正在启动";
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
             HideForm();
+            Utils.SaveLog("[Startup] Base tray icon initialized.");
             this.Text = Utils.GetVersion();
 
             // Disable update checks for this Windows XP build.
@@ -81,29 +86,29 @@ namespace v2rayN.Forms
 
         private void MainForm_Shown(object sender, EventArgs e)
         {
-            // 先把 UI 初始化任务排入消息循环，再启动后台核心，保证列表先于启动完成回调更新。
+            // The base tray icon is already visible. Queue core startup before doing
+            // the heavier server-list and routing-menu initialization.
+            HideForm();
+            StartInitialV2ray();
+
+            // Run this small UI setup while the core starts on its dedicated worker.
+            // Keeping it in this Shown callback also guarantees the controls exist
+            // before the worker posts its completion callback back to the UI thread.
             try
             {
-                BeginInvoke((MethodInvoker)delegate
-                {
-                    if (startupExiting || IsDisposed) return;
-                    Stopwatch sw = Stopwatch.StartNew();
-                    InitServersView();
-                    RefreshServers();
-                    RefreshRoutingsMenu();
-                    RestoreUI();
-                    sw.Stop();
-                    Utils.SaveLog("[Startup] UI server/routing initialization: "
-                        + sw.ElapsedMilliseconds + " ms");
-                });
+                Stopwatch sw = Stopwatch.StartNew();
+                InitServersView();
+                RefreshServers();
+                RefreshRoutingsMenu();
+                RestoreUI();
+                sw.Stop();
+                Utils.SaveLog("[Startup] UI server/routing initialization: "
+                    + sw.ElapsedMilliseconds + " ms");
             }
             catch (Exception ex)
             {
-                Utils.SaveLog("Deferred UI initialization failed: " + ex.Message, ex);
+                Utils.SaveLog("UI initialization failed: " + ex.Message, ex);
             }
-
-            StartInitialV2ray();
-            HideForm();
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -454,7 +459,7 @@ namespace v2rayN.Forms
                 return;
             }
 
-            ThreadPool.QueueUserWorkItem(delegate
+            Thread startupThread = new Thread(delegate
             {
                 bool coreReady = false;
                 StatisticsHandler startupStatistics = null;
@@ -536,6 +541,11 @@ namespace v2rayN.Forms
                     catch { }
                 }
             });
+            startupThread.IsBackground = true;
+            startupThread.Priority = ThreadPriority.AboveNormal;
+            startupThread.Name = "v2rayN-CoreStartup";
+            startupThread.Start();
+            Utils.SaveLog("[Startup] Core startup worker started (AboveNormal).");
         }
 
         /// <summary>
