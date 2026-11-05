@@ -1210,13 +1210,13 @@ namespace v2rayN.Forms
                     }
                 }
 
-                // 默认隐藏内核高频连接记录，避免正常使用时日志刷屏。
+                // 按设置的核心日志等级过滤带级别的日志；无级别的 v2rayN 操作提示始终保留。
                 string[] lines = text.Replace("\r\n", "\n").Split('\n');
                 StringBuilder visibleText = new StringBuilder();
                 bool hasVisibleLine = false;
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (IsVerboseLogLine(lines[i]))
+                    if (!ShouldShowLogLevelLine(lines[i]) || IsVerboseLogLine(lines[i]))
                         continue;
 
                     if (hasVisibleLine)
@@ -1227,6 +1227,59 @@ namespace v2rayN.Forms
                 if (visibleText.Length > 0)
                     ShowMsg(visibleText.ToString());
             }
+        }
+
+        /// <summary>
+        /// 按设置的日志等级过滤内核日志。未标注等级的 GUI 操作提示不受影响。
+        /// </summary>
+        private bool ShouldShowLogLevelLine(string line)
+        {
+            if (String.IsNullOrEmpty(line) || config == null)
+                return true;
+
+            string value = line.ToLowerInvariant();
+            int lineLevel = -1;
+            if (value.IndexOf("[debug]", StringComparison.Ordinal) >= 0)
+                lineLevel = 0;
+            else if (value.IndexOf("[info]", StringComparison.Ordinal) >= 0)
+                lineLevel = 1;
+            else if (value.IndexOf("[warning]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("[warn]", StringComparison.Ordinal) >= 0)
+                lineLevel = 2;
+            else if (value.IndexOf("[error]", StringComparison.Ordinal) >= 0)
+                lineLevel = 3;
+            else if (value.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("panic:", StringComparison.Ordinal) >= 0)
+                lineLevel = 4;
+
+            // 不认识的格式（包括 v2rayN 自身提示）保持显示。
+            if (lineLevel < 0)
+                return true;
+
+            string configuredLevel = (config.loglevel ?? "warning").ToLowerInvariant();
+            int minimumLevel;
+            switch (configuredLevel)
+            {
+                case "debug":
+                    minimumLevel = 0;
+                    break;
+                case "info":
+                    minimumLevel = 1;
+                    break;
+                case "warning":
+                case "warn":
+                    minimumLevel = 2;
+                    break;
+                case "error":
+                    minimumLevel = 3;
+                    break;
+                case "none":
+                    return false;
+                default:
+                    minimumLevel = 1;
+                    break;
+            }
+            return lineLevel >= minimumLevel;
         }
 
         /// <summary>
