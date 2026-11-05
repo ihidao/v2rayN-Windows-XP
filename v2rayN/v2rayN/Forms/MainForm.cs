@@ -1243,11 +1243,11 @@ namespace v2rayN.Forms
                 return line;
 
             // 已经有完整日期时间戳，保持核心原始输出。
-            if (Regex.IsMatch(line, @"^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}"))
+            if (Regex.IsMatch(line, @"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}"))
                 return line;
 
             // 真连接测速模块已有自己的时分秒与等级格式。
-            if (Regex.IsMatch(line, @"^\\[\\d{2}:\\d{2}:\\d{2}\\] \\[(INFO|WARNING|ERROR)\\]",
+            if (Regex.IsMatch(line, @"^\[\d{2}:\d{2}:\d{2}\] \[(INFO|WARNING|ERROR)\]",
                 RegexOptions.IgnoreCase))
                 return line;
 
