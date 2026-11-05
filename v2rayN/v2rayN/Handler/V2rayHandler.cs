@@ -288,19 +288,21 @@ namespace v2rayN.Handler
                     if (ports == null || ports.Count == 0)
                         return p;
 
-                    for (int elapsed = 0; elapsed < 2000; elapsed += 100)
+                    // Poll at 50 ms intervals so the UI can proceed promptly once
+                    // the SOCKS listener is available, without adding a fixed startup delay.
+                    for (int elapsed = 0; elapsed < 2000; elapsed += 50)
                     {
                         if (p.HasExited) break;
                         if (IsAnyPortReady(ports))
                         {
-                            if (!p.WaitForExit(100))
+                            if (!p.WaitForExit(50))
                             {
                                 ShowMsg(false, "内核启动提示与 SOCKS 端口检查均通过。" + Environment.NewLine);
                                 return p;
                             }
                             break;
                         }
-                        if (p.WaitForExit(100)) break;
+                        if (p.WaitForExit(50)) break;
                     }
                 }
 
