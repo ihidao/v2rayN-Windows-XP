@@ -74,6 +74,18 @@ namespace v2rayN.Handler
             // 也应重新生成配置并启动核心，不能仅因旧进程不再运行就报告“核心未就绪”。
             if (reloadConfig || !IsCoreRunning)
             {
+                string fileName = Utils.GetPath(v2rayConfigRes);
+                string msg;
+                if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
+                {
+                    ShowMsg(false, msg);
+                    return;
+                }
+
+                // 先停止本程序自己管理的旧核心，再做端口预检。
+                // 否则旧核心仍占用 SOCKS/HTTP 端口，会被误判为外部端口冲突。
+                V2rayStop();
+
                 string conflict;
                 if (FindInboundPortConflict(config, out conflict))
                 {
@@ -82,17 +94,8 @@ namespace v2rayN.Handler
                     return;
                 }
 
-                string fileName = Utils.GetPath(v2rayConfigRes);
-                string msg;
-                if (V2rayConfigHandler.GenerateClientConfig(config, fileName, false, out msg) != 0)
-                {
-                    ShowMsg(false, msg);
-                }
-                else
-                {
-                    ShowMsg(true, msg);
-                    V2rayRestart();
-                }
+                ShowMsg(true, msg);
+                V2rayStart();
             }
         }
 
