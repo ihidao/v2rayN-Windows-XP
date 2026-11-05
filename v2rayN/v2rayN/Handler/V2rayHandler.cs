@@ -256,6 +256,8 @@ namespace v2rayN.Handler
             {
                 if (String.IsNullOrEmpty(e.Data)) return;
                 lock (errorText) errorText.AppendLine(e.Data);
+                if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
+                    ShowMsg(false, e.Data + Environment.NewLine);
                 if (IsCoreStartedMessage(e.Data))
                 {
                     lock (startupLock) startedMessageSeen = true;
@@ -357,6 +359,17 @@ namespace v2rayN.Handler
             return line.IndexOf("started", StringComparison.OrdinalIgnoreCase) >= 0
                 && (line.IndexOf("V2Ray", StringComparison.OrdinalIgnoreCase) >= 0
                     || line.IndexOf("Xray", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private bool IsImportantCoreDiagnostic(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+            string value = line.ToLowerInvariant();
+            return value.IndexOf("[warning]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("[error]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("panic:", StringComparison.Ordinal) >= 0
+                || value.IndexOf("failed", StringComparison.Ordinal) >= 0;
         }
 
         private bool IsRoutineCoreOutput(string line)
