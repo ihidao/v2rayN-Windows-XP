@@ -215,7 +215,9 @@ namespace v2rayN.Handler
             stopping_ = true;
             if (worker_ != null && worker_.IsAlive)
             {
-                try { worker_.Join(1500); } catch { }
+                // PollStatistics waits at most five seconds for the core CLI.
+                // Wait for that bounded query to finish before a replacement worker starts.
+                try { worker_.Join(6000); } catch { }
             }
             SaveToFile();
         }
