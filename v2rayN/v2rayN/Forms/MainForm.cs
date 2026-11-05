@@ -1204,14 +1204,47 @@ namespace v2rayN.Forms
             {
                 if (!Utils.IsNullOrEmpty(MsgFilter))
                 {
-                    if (!Regex.IsMatch(text,MsgFilter))
+                    if (!Regex.IsMatch(text, MsgFilter))
                     {
                         return;
                     }
                 }
-                //this.txtMsgBox.AppendText(text);
-                ShowMsg(text);
+
+                // 默认隐藏内核高频连接记录，避免正常使用时日志刷屏。
+                string[] lines = text.Replace("\r\n", "\n").Split('\n');
+                StringBuilder visibleText = new StringBuilder();
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (!IsVerboseLogLine(lines[i]))
+                        visibleText.Append(lines[i]);
+                    if (i < lines.Length - 1)
+                        visibleText.Append(Environment.NewLine);
+                }
+                if (visibleText.Length > 0)
+                    ShowMsg(visibleText.ToString());
             }
+        }
+
+        /// <summary>
+        /// 判断是否为默认不显示的高频内核连接日志。
+        /// 警告和错误永远保留，避免过滤掉真正的故障原因。
+        /// </summary>
+        private bool IsVerboseLogLine(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+
+            string value = line.ToLowerInvariant();
+            if (value.IndexOf("[warning]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("[error]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
+                || value.IndexOf("panic:", StringComparison.Ordinal) >= 0
+                || value.IndexOf("failed", StringComparison.Ordinal) >= 0)
+                return false;
+
+            return value.IndexOf(" accepted ", StringComparison.Ordinal) >= 0
+                || value.IndexOf("connection ends", StringComparison.Ordinal) >= 0
+                || value.IndexOf("connection closed", StringComparison.Ordinal) >= 0
+                || value.IndexOf("closed connection", StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>
