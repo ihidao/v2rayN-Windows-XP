@@ -258,7 +258,7 @@ namespace v2rayN.Handler
                 // routine connection chatter to the GUI log window.
                 if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
                 {
-                    Utils.SaveLog("CORE", e.Data);
+                    Utils.SaveLogDetail("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
                 }
                 if (IsCoreStartedMessage(e.Data))
@@ -274,7 +274,7 @@ namespace v2rayN.Handler
                 {
                     // Preserve full core diagnostics in guiLogs even when the GUI
                     // displays only the concise warning/error line.
-                    Utils.SaveLog("CORE", e.Data);
+                    Utils.SaveLogDetail("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
                 }
                 if (IsCoreStartedMessage(e.Data))
