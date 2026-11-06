@@ -41,7 +41,7 @@ namespace v2rayN.Forms
             notifyMain.Text = UIRes.I18N("AppStarting");
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
-            HideForm();
+            notifyMain.Visible = true;
             this.Text = Utils.GetVersion();
 
             // Disable update checks for this Windows XP build.
@@ -1448,30 +1448,46 @@ namespace v2rayN.Forms
 
         private void ShowForm()
         {
-            this.Show();
-            this.WindowState = FormWindowState.Normal;
-            this.Activate();
-            this.ShowInTaskbar = true;
-            //this.notifyIcon1.Visible = false;
-            this.txtMsgBox.ScrollToCaret();
-            //if (config.index >= 0 && config.index < lvServers.Items.Count)
-            //{
-            //    lvServers.Items[config.index].Selected = true;
-            //    lvServers.EnsureVisible(config.index); // workaround
-            //}
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
 
-            SetVisibleCore(true);
+            // Set the taskbar state and restore the window before showing it.
+            // Show() already updates the WinForms visibility state; calling
+            // SetVisibleCore() again here can cause redundant native show/hide messages.
+            this.ShowInTaskbar = true;
+            if (this.WindowState == FormWindowState.Minimized)
+            {
+                this.WindowState = FormWindowState.Normal;
+            }
+
+            if (!this.Visible)
+            {
+                this.Show();
+            }
+
+            this.Activate();
+            this.txtMsgBox.ScrollToCaret();
         }
 
         private void HideForm()
         {
-            //this.WindowState = FormWindowState.Minimized;
-            this.Hide();
-            //this.notifyMain.Icon = this.Icon;
-            this.notifyMain.Visible = true;
-            this.ShowInTaskbar = false;
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
 
-            SetVisibleCore(false);
+            // Keep the tray icon available before removing the window from the taskbar.
+            if (!this.notifyMain.Visible)
+            {
+                this.notifyMain.Visible = true;
+            }
+            this.ShowInTaskbar = false;
+            if (this.Visible)
+            {
+                this.Hide();
+            }
         }
 
         #endregion
