@@ -20,6 +20,7 @@ namespace v2rayN.Handler
         public event ProcessDelegate ProcessEvent;
         private Process _process;
         private List<int> readinessPorts = new List<int>();
+        private List<int> readinessUdpPorts = new List<int>();
 
         /// <summary>
         /// True only while the process launched by this handler is still alive.
@@ -47,6 +48,7 @@ namespace v2rayN.Handler
         public void LoadV2ray(Config config, bool reloadConfig)
         {
             readinessPorts = new List<int>();
+            readinessUdpPorts = new List<int>();
             if (config.inbound != null)
             {
                 foreach (var inbound in config.inbound)
@@ -54,9 +56,13 @@ namespace v2rayN.Handler
                     // 系统代理依赖 SOCKS 入站；不能用其他 inbound 的端口误判核心就绪。
                     if (inbound != null
                         && inbound.protocol == Global.InboundSocks
-                        && inbound.localPort > 0
-                        && !readinessPorts.Contains(inbound.localPort))
-                        readinessPorts.Add(inbound.localPort);
+                        && inbound.localPort > 0)
+                    {
+                        if (!readinessPorts.Contains(inbound.localPort))
+                            readinessPorts.Add(inbound.localPort);
+                        if (inbound.udpEnabled && !readinessUdpPorts.Contains(inbound.localPort))
+                            readinessUdpPorts.Add(inbound.localPort);
+                    }
                 }
             }
 
@@ -96,15 +102,10 @@ namespace v2rayN.Handler
                     return;
                 }
 
-                // 按当前配置实际选中的内核可执行文件名清理所有同名进程。
-                // 不检查进程路径：即使进程来自其他目录，也会按用户要求结束。
-                string coreFileName = V2rayFindexe();
-                if (String.IsNullOrEmpty(coreFileName))
-                    return;
-
+                // 只清理占用本次入站端口、且可执行文件确实位于当前 v2rayN
+                // 安装目录中的 v2ray/wv2ray/xray 核心。其他软件或独立核心不误杀。
                 string cleanupMessage;
-                string processName = Path.GetFileNameWithoutExtension(coreFileName);
-                if (!StopAllProcessesByName(processName, out cleanupMessage))
+                if (!StopManagedCoreProcessesOnInboundPorts(config, out cleanupMessage))
                 {
                     ShowMsg(false, cleanupMessage);
                     Utils.SaveLog(cleanupMessage);
@@ -125,8 +126,151 @@ namespace v2rayN.Handler
         }
 
         /// <summary>
-        /// 同名内核清理后检查配置端口的占用者。
-        /// 只报告外部程序，不结束非内核进程；最终仍以内核实际绑定结果为准。
+        /// 清理占用当前配置入站端口的本程序安装目录内的核心进程。
+        /// 不按进程名全局结束进程，避免误杀其他目录中的独立 V2Ray/Xray。
+        /// </summary>
+        private bool StopManagedCoreProcessesOnInboundPorts(Config config, out string message)
+        {
+            message = String.Empty;
+            if (config == null || config.inbound == null || config.inbound.Count == 0)
+                return true;
+
+            IPAddress listenAddress = config.allowLANConn ? IPAddress.Any : IPAddress.Loopback;
+            Dictionary<int, bool> tcpPorts = new Dictionary<int, bool>();
+            Dictionary<int, bool> udpPorts = new Dictionary<int, bool>();
+            foreach (var inbound in config.inbound)
+            {
+                if (inbound == null || inbound.localPort <= 0 || inbound.localPort > 65535)
+                    continue;
+                tcpPorts[inbound.localPort] = true;
+                if (inbound.udpEnabled)
+                    udpPorts[inbound.localPort] = true;
+            }
+            if (config.inbound[0] != null)
+            {
+                int httpPort = config.inbound[0].localPort + 1;
+                if (httpPort > 0 && httpPort <= 65535)
+                    tcpPorts[httpPort] = true;
+            }
+
+            List<uint> ownerIds = new List<uint>();
+            try
+            {
+                foreach (TcpOwnerRow row in GetTcpListenerOwners())
+                {
+                    int port = GetHostPort(row.localPort);
+                    IPAddress address = new IPAddress(BitConverter.GetBytes(row.localAddr));
+                    if (tcpPorts.ContainsKey(port) && IsAddressConflict(listenAddress, address)
+                        && !ownerIds.Contains(row.owningPid))
+                        ownerIds.Add(row.owningPid);
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[CoreCleanup] TCP owner enumeration failed: " + ex.Message, ex);
+            }
+            try
+            {
+                foreach (UdpOwnerRow row in GetUdpOwners())
+                {
+                    int port = GetHostPort(row.localPort);
+                    IPAddress address = new IPAddress(BitConverter.GetBytes(row.localAddr));
+                    if (udpPorts.ContainsKey(port) && IsAddressConflict(listenAddress, address)
+                        && !ownerIds.Contains(row.owningPid))
+                        ownerIds.Add(row.owningPid);
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[CoreCleanup] UDP owner enumeration failed: " + ex.Message, ex);
+            }
+
+            StringBuilder failures = new StringBuilder();
+            foreach (uint ownerId in ownerIds)
+            {
+                Process owner = null;
+                try
+                {
+                    owner = Process.GetProcessById((int)ownerId);
+                    if (!IsManagedCoreProcess(owner))
+                    {
+                        Utils.SaveLog("[CoreCleanup] Keeping external port owner; PID=" + ownerId
+                            + "; process=" + owner.ProcessName + ".");
+                        continue;
+                    }
+
+                    string processName = owner.ProcessName;
+                    if (!owner.HasExited)
+                    {
+                        try { owner.CloseMainWindow(); } catch { }
+                        if (!owner.WaitForExit(500))
+                        {
+                            owner.Kill();
+                            if (!owner.WaitForExit(5000))
+                                throw new InvalidOperationException("强制结束后仍未退出。");
+                        }
+                    }
+                    if (!owner.HasExited)
+                        throw new InvalidOperationException("进程仍在运行。");
+                    Utils.SaveLog("[CoreCleanup] Terminated managed core occupying inbound port: "
+                        + processName + "; PID=" + ownerId);
+                }
+                catch (ArgumentException)
+                {
+                    // The owner exited between the port-table snapshot and PID lookup.
+                }
+                catch (Exception ex)
+                {
+                    failures.AppendLine("PID=" + ownerId + ": " + ex.Message);
+                }
+                finally
+                {
+                    if (owner != null) try { owner.Dispose(); } catch { }
+                }
+            }
+
+            if (failures.Length > 0)
+            {
+                message = "无法结束占用入站端口的受管理内核进程，已取消启动："
+                    + Environment.NewLine + failures.ToString();
+                return false;
+            }
+            return true;
+        }
+
+        private bool IsManagedCoreProcess(Process process)
+        {
+            if (process == null)
+                return false;
+            string name;
+            try { name = process.ProcessName; }
+            catch { return false; }
+            if (!String.Equals(name, "v2ray", StringComparison.OrdinalIgnoreCase)
+                && !String.Equals(name, "wv2ray", StringComparison.OrdinalIgnoreCase)
+                && !String.Equals(name, "xray", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                string actualPath = Path.GetFullPath(process.MainModule.FileName);
+                string[] knownCoreFiles = new string[] { "v2ray.exe", "wv2ray.exe", "xray.exe" };
+                foreach (string coreFile in knownCoreFiles)
+                {
+                    string expectedPath = Path.GetFullPath(Utils.GetPath(coreFile));
+                    if (String.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[CoreCleanup] Cannot verify executable path; process will not be terminated. PID="
+                    + process.Id + "; " + ex.Message);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 检查配置端口的占用者。只报告未被安全清理的外部程序。
         /// </summary>
         private bool FindInboundPortConflict(Config config, out string message)
         {
@@ -203,7 +347,7 @@ namespace v2rayN.Handler
 
             message = "检测到 v2rayN 配置的本地端口仍被其他进程占用："
                 + Environment.NewLine + conflicts.ToString()
-                + "请关闭对应程序或修改 v2rayN 的本地入站端口。v2rayN 不会自动结束这些非内核进程。";
+                + "请关闭对应程序或修改 v2rayN 的本地入站端口。为避免误杀其他软件，v2rayN 不会结束这些外部进程。";
             return true;
         }
 
@@ -237,8 +381,7 @@ namespace v2rayN.Handler
             }
 
             message = "等待内核端口释放超时（" + timeoutMs + " ms），检测到端口仍被占用："
-                + Environment.NewLine + lastConflict
-                + "请关闭对应程序或修改 v2rayN 的本地入站端口。v2rayN 不会自动结束这些非内核进程。";
+                + Environment.NewLine + lastConflict;
             return true;
         }
 
@@ -653,7 +796,7 @@ namespace v2rayN.Handler
                     for (int elapsed = 0; elapsed < 10000; elapsed += 50)
                     {
                         if (p.HasExited) break;
-                        if (IsAnyPortReady(ports) && !p.HasExited)
+                        if (IsAnyPortReady(ports, p.Id) && !p.HasExited)
                         {
                             startupElapsedMs = startupWatch.ElapsedMilliseconds;
                             coreNameVersion = detectedCoreNameVersion;
@@ -770,11 +913,57 @@ namespace v2rayN.Handler
             return false;
         }
 
-        private bool IsAnyPortReady(List<int> ports)
+        private bool IsAnyPortReady(List<int> ports, int processId)
         {
             if (ports == null || ports.Count == 0) return false;
+            List<TcpOwnerRow> tcpOwners;
+            List<UdpOwnerRow> udpOwners;
+            try
+            {
+                tcpOwners = GetTcpListenerOwners();
+                udpOwners = readinessUdpPorts.Count > 0 ? GetUdpOwners() : new List<UdpOwnerRow>();
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[CoreStartup] Unable to verify listener process ownership: " + ex.Message, ex);
+                return false;
+            }
+
             foreach (int port in ports)
             {
+                bool ownedByStartedCore = false;
+                foreach (TcpOwnerRow owner in tcpOwners)
+                {
+                    if (GetHostPort(owner.localPort) == port && owner.owningPid == (uint)processId)
+                    {
+                        ownedByStartedCore = true;
+                        break;
+                    }
+                }
+                if (!ownedByStartedCore)
+                    continue;
+
+                bool udpReady = true;
+                foreach (int udpPort in readinessUdpPorts)
+                {
+                    bool udpOwnedByStartedCore = false;
+                    foreach (UdpOwnerRow owner in udpOwners)
+                    {
+                        if (GetHostPort(owner.localPort) == udpPort && owner.owningPid == (uint)processId)
+                        {
+                            udpOwnedByStartedCore = true;
+                            break;
+                        }
+                    }
+                    if (!udpOwnedByStartedCore)
+                    {
+                        udpReady = false;
+                        break;
+                    }
+                }
+                if (!udpReady)
+                    continue;
+
                 try
                 {
                     using (TcpClient client = new TcpClient())
