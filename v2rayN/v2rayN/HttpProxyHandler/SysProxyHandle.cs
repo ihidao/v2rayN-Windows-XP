@@ -76,7 +76,7 @@ namespace v2rayN.HttpProxyHandler
             }
 
             if (global)
-                ApplyGlobalProxy(strProxy, Global.IEProxyExceptions);
+                ApplyGlobalProxy(strProxy, Global.IEProxyExceptions + ";<local>");
             else
                 ApplyPac(strProxy);
         }
@@ -84,8 +84,8 @@ namespace v2rayN.HttpProxyHandler
         public static void SetIEProxy(bool global, string strProxy, string strExceptions)
         {
             string bypass = String.IsNullOrEmpty(strExceptions)
-                ? Global.IEProxyExceptions
-                : Global.IEProxyExceptions + ";" + strExceptions;
+                ? Global.IEProxyExceptions + ";<local>"
+                : strExceptions;
 
             if (global)
                 ApplyGlobalProxy(strProxy, bypass);
