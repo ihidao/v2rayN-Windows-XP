@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Runtime.InteropServices;
 using v2rayN.Mode;
 
 namespace v2rayN.Handler
@@ -118,6 +118,11 @@ namespace v2rayN.Handler
                     Utils.SaveLog(conflict);
                     return;
                 }
+                {
+                    ShowMsg(false, conflict);
+                    Utils.SaveLog(conflict);
+                    return;
+                }
 
                 ShowMsg(true, msg);
                 V2rayStart();
@@ -125,8 +130,8 @@ namespace v2rayN.Handler
         }
 
         /// <summary>
-        /// 启动前检查本程序实际使用的本地 TCP 入站端口是否已被占用。
-        /// 这里只做预检，不会终止或修改占用端口的其他程序。
+        /// 同名内核清理后检查配置端口的占用者。
+        /// 只报告外部程序，不结束非内核进程；最终仍以内核实际绑定结果为准。
         /// </summary>
         private bool FindInboundPortConflict(Config config, out string message)
         {
@@ -135,96 +140,198 @@ namespace v2rayN.Handler
                 return false;
 
             IPAddress listenAddress = config.allowLANConn ? IPAddress.Any : IPAddress.Loopback;
-            List<int> portsToCheck = new List<int>();
+            Dictionary<int, bool> tcpPorts = new Dictionary<int, bool>();
+            Dictionary<int, bool> udpPorts = new Dictionary<int, bool>();
+
             foreach (var inbound in config.inbound)
             {
-                if (inbound == null || inbound.localPort <= 0)
+                if (inbound == null || inbound.localPort <= 0 || inbound.localPort > 65535)
                     continue;
-                if (!portsToCheck.Contains(inbound.localPort))
-                    portsToCheck.Add(inbound.localPort);
+                tcpPorts[inbound.localPort] = true;
+                if (inbound.udpEnabled)
+                    udpPorts[inbound.localPort] = true;
             }
 
-            // 当前 GUI 的 HTTP 入站端口按 SOCKS 端口 + 1 生成。
+            // 当前 GUI 的 HTTP 入站端口按第一个 inbound 端口 + 1 生成。
             if (config.inbound[0] != null)
             {
                 int httpPort = config.inbound[0].localPort + 1;
-                if (httpPort > 0 && httpPort <= 65535 && !portsToCheck.Contains(httpPort))
-                    portsToCheck.Add(httpPort);
+                if (httpPort > 0 && httpPort <= 65535)
+                    tcpPorts[httpPort] = true;
             }
 
-            // TCP 只检查系统当前的监听端点，不通过临时绑定探测。
-            // FIN_WAIT_2、TIME_WAIT 等连接状态不是监听状态，不应被误报为端口冲突。
-            IPEndPoint[] activeListeners;
+            StringBuilder conflicts = new StringBuilder();
             try
             {
-                activeListeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+                foreach (TcpOwnerRow row in GetTcpListenerOwners())
+                {
+                    int port = GetHostPort(row.localPort);
+                    if (!tcpPorts.ContainsKey(port))
+                        continue;
+
+                    IPAddress boundAddress = new IPAddress(BitConverter.GetBytes(row.localAddr));
+                    if (!IsAddressConflict(listenAddress, boundAddress))
+                        continue;
+
+                    conflicts.AppendLine(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
+                }
+
+                foreach (UdpOwnerRow row in GetUdpOwners())
+                {
+                    int port = GetHostPort(row.localPort);
+                    if (!udpPorts.ContainsKey(port))
+                        continue;
+
+                    IPAddress boundAddress = new IPAddress(BitConverter.GetBytes(row.localAddr));
+                    if (!IsAddressConflict(listenAddress, boundAddress))
+                        continue;
+
+                    conflicts.AppendLine(FormatPortOwner("UDP", boundAddress, port, row.owningPid));
+                }
             }
             catch (Exception ex)
             {
-                // 无法读取监听列表时不阻止启动；由核心实际绑定端口并报告真实错误。
-                Utils.SaveLog("Unable to query active TCP listeners; skip TCP pre-check: " + ex.Message, ex);
-                activeListeners = new IPEndPoint[0];
+                // 查询 API 不可用时不误杀程序，也不阻止核心自行尝试绑定。
+                Utils.SaveLog("[PortCheck] Unable to inspect port owners; core will verify binding: " + ex.Message, ex);
+                return false;
             }
 
-            foreach (int port in portsToCheck)
-            {
-                foreach (IPEndPoint listener in activeListeners)
-                {
-                    if (listener == null || listener.Address.AddressFamily != AddressFamily.InterNetwork || listener.Port != port)
-                        continue;
+            if (conflicts.Length == 0)
+                return false;
 
-                    // 监听在 0.0.0.0 上的端点与所有 IPv4 地址冲突；
-                    // 目标为 0.0.0.0 时，任何同端口 IPv4 监听端点都冲突。
-                    bool addressConflict = listener.Address.Equals(IPAddress.Any)
-                        || listenAddress.Equals(IPAddress.Any)
-                        || listener.Address.Equals(listenAddress);
-                    if (!addressConflict)
-                        continue;
-
-                    message = String.Format(
-                        "本地 TCP 端口 {0}:{1} 已处于 LISTENING 状态，可能被其他程序占用。\r\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
-                        listenAddress, port);
-                    return true;
-                }
-            }
-
-            // UDP 端口也通过系统绑定端点查询，不再临时独占绑定探测。
-            // 临时绑定容易与旧核心退出过程产生竞态；查询失败时交由核心报告真实错误。
-            if (config.inbound[0] != null && config.inbound[0].udpEnabled
-                && config.inbound[0].localPort > 0)
-            {
-                IPEndPoint[] activeUdpListeners;
-                try
-                {
-                    activeUdpListeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveUdpListeners();
-                }
-                catch (Exception ex)
-                {
-                    Utils.SaveLog("Unable to query active UDP listeners; skip UDP pre-check: " + ex.Message, ex);
-                    activeUdpListeners = new IPEndPoint[0];
-                }
-
-                foreach (IPEndPoint listener in activeUdpListeners)
-                {
-                    if (listener == null
-                        || listener.Address.AddressFamily != AddressFamily.InterNetwork
-                        || listener.Port != config.inbound[0].localPort)
-                        continue;
-
-                    bool addressConflict = listener.Address.Equals(IPAddress.Any)
-                        || listenAddress.Equals(IPAddress.Any)
-                        || listener.Address.Equals(listenAddress);
-                    if (!addressConflict)
-                        continue;
-
-                    message = String.Format(
-                        "本地 UDP 端口 {0}:{1} 已被绑定，可能被其他程序占用。\\r\\n请检查端口占用情况，关闭冲突程序，或修改 v2rayN 的本地入站端口设置。",
-                        listenAddress, config.inbound[0].localPort);
-                    return true;
-                }
-            }
-            return false;
+            message = "检测到 v2rayN 配置的本地端口仍被其他进程占用："
+                + Environment.NewLine + conflicts.ToString()
+                + "请关闭对应程序或修改 v2rayN 的本地入站端口。v2rayN 不会自动结束这些非内核进程。";
+            return true;
         }
+
+        private bool IsAddressConflict(IPAddress targetAddress, IPAddress boundAddress)
+        {
+            return boundAddress.Equals(IPAddress.Any)
+                || targetAddress.Equals(IPAddress.Any)
+                || boundAddress.Equals(targetAddress);
+        }
+
+        private string FormatPortOwner(string protocol, IPAddress address, int port, uint processId)
+        {
+            string processName = "未知";
+            try
+            {
+                using (Process owner = Process.GetProcessById((int)processId))
+                    processName = owner.ProcessName;
+            }
+            catch
+            {
+                // 进程可能在枚举端口后立即退出，保留 PID 供用户排查。
+            }
+
+            return String.Format("{0} {1}:{2}，PID={3}，进程={4}",
+                protocol, address, port, processId, processName);
+        }
+
+        private int GetHostPort(uint networkPort)
+        {
+            return (ushort)IPAddress.NetworkToHostOrder((short)(networkPort & 0xFFFF));
+        }
+
+        private List<TcpOwnerRow> GetTcpListenerOwners()
+        {
+            const int AF_INET = 2;
+            const int TCP_TABLE_OWNER_PID_LISTENER = 3;
+            int bufferLength = 0;
+            GetExtendedTcpTable(IntPtr.Zero, ref bufferLength, true, AF_INET,
+                TCP_TABLE_OWNER_PID_LISTENER, 0);
+            if (bufferLength <= 0)
+                return new List<TcpOwnerRow>();
+
+            IntPtr buffer = Marshal.AllocHGlobal(bufferLength);
+            try
+            {
+                int result = GetExtendedTcpTable(buffer, ref bufferLength, true, AF_INET,
+                    TCP_TABLE_OWNER_PID_LISTENER, 0);
+                if (result != 0)
+                    throw new InvalidOperationException("GetExtendedTcpTable failed: " + result);
+
+                uint count = (uint)Marshal.ReadInt32(buffer);
+                int rowSize = Marshal.SizeOf(typeof(TcpOwnerRow));
+                IntPtr rowPointer = IntPtr.Add(buffer, sizeof(uint));
+                List<TcpOwnerRow> rows = new List<TcpOwnerRow>();
+                for (uint i = 0; i < count; i++)
+                {
+                    rows.Add((TcpOwnerRow)Marshal.PtrToStructure(rowPointer, typeof(TcpOwnerRow)));
+                    rowPointer = IntPtr.Add(rowPointer, rowSize);
+                }
+                return rows;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        private List<UdpOwnerRow> GetUdpOwners()
+        {
+            const int AF_INET = 2;
+            const int UDP_TABLE_OWNER_PID = 1;
+            int bufferLength = 0;
+            GetExtendedUdpTable(IntPtr.Zero, ref bufferLength, true, AF_INET,
+                UDP_TABLE_OWNER_PID, 0);
+            if (bufferLength <= 0)
+                return new List<UdpOwnerRow>();
+
+            IntPtr buffer = Marshal.AllocHGlobal(bufferLength);
+            try
+            {
+                int result = GetExtendedUdpTable(buffer, ref bufferLength, true, AF_INET,
+                    UDP_TABLE_OWNER_PID, 0);
+                if (result != 0)
+                    throw new InvalidOperationException("GetExtendedUdpTable failed: " + result);
+
+                uint count = (uint)Marshal.ReadInt32(buffer);
+                int rowSize = Marshal.SizeOf(typeof(UdpOwnerRow));
+                IntPtr rowPointer = IntPtr.Add(buffer, sizeof(uint));
+                List<UdpOwnerRow> rows = new List<UdpOwnerRow>();
+                for (uint i = 0; i < count; i++)
+                {
+                    rows.Add((UdpOwnerRow)Marshal.PtrToStructure(rowPointer, typeof(UdpOwnerRow)));
+                    rowPointer = IntPtr.Add(rowPointer, rowSize);
+                }
+                return rows;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct TcpOwnerRow
+        {
+            public uint state;
+            public uint localAddr;
+            public uint localPort;
+            public uint remoteAddr;
+            public uint remotePort;
+            public uint owningPid;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct UdpOwnerRow
+        {
+            public uint localAddr;
+            public uint localPort;
+            public uint owningPid;
+        }
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        private static extern int GetExtendedTcpTable(
+            IntPtr tcpTable, ref int outBufferLength, bool sort, int ipVersion,
+            int tableClass, uint reserved);
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        private static extern int GetExtendedUdpTable(
+            IntPtr udpTable, ref int outBufferLength, bool sort, int ipVersion,
+            int tableClass, uint reserved);
 
         public int LoadV2rayConfigString(Config config, List<int> selecteds,
             out Dictionary<int, int> speedTestPorts)
