@@ -357,7 +357,7 @@ namespace v2rayN.Handler
             if (conflicts.Length == 0)
                 return false;
 
-            message = conflicts.ToString();
+            message = "[Error] " + conflicts.ToString();
             return true;
         }
 
@@ -429,8 +429,8 @@ namespace v2rayN.Handler
                 // 进程可能在枚举端口后立即退出，保留 PID 供用户排查。
             }
 
-            // Keep the conflict visible under Warning/Error log filters.
-            return "[Error] " + String.Format(UIRes.I18N("PortOwnerDetails"),
+            // The combined conflict message adds one [Error] prefix for all ports.
+            return String.Format(UIRes.I18N("PortOwnerDetails"),
                 port, processName, processId);
         }
 
