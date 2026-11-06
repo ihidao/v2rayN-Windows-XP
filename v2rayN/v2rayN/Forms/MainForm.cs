@@ -27,6 +27,9 @@ namespace v2rayN.Forms
         private bool coreRestartInProgress;
         private bool coreRestartPending;
         private bool pendingReloadConfig;
+        // Do not let an early tray click race the first-time window/UI initialization.
+        private bool startupUiReady;
+        private bool trayShowPending;
 
         #region Window 事件
 
@@ -91,14 +94,11 @@ namespace v2rayN.Forms
 
         private void MainForm_Shown(object sender, EventArgs e)
         {
-            // The base tray icon is already visible. Queue core startup before doing
-            // the heavier server-list and routing-menu initialization.
+            // Hide the initial Application.Run() display before accepting tray requests.
+            // The tray icon is already available, and core startup remains independent.
             HideForm();
             StartInitialV2ray();
 
-            // Run this small UI setup while the core starts on its dedicated worker.
-            // Keeping it in this Shown callback also guarantees the controls exist
-            // before the worker posts its completion callback back to the UI thread.
             try
             {
                 Stopwatch sw = Stopwatch.StartNew();
@@ -113,6 +113,20 @@ namespace v2rayN.Forms
             catch (Exception ex)
             {
                 Utils.SaveLog("UI initialization failed: " + ex.Message, ex);
+            }
+            finally
+            {
+                // Mark the window ready only after its controls and saved layout are ready.
+                startupUiReady = true;
+                if (trayShowPending)
+                {
+                    trayShowPending = false;
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (!startupExiting && !IsDisposed && !Disposing)
+                            ShowForm();
+                    });
+                }
             }
         }
 
@@ -1431,9 +1445,29 @@ namespace v2rayN.Forms
 
         private void notifyMain_MouseClick(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (e.Button != MouseButtons.Left || startupExiting)
+                return;
+
+            // A tray click received during the first show/hide transition is queued.
+            // This prevents an early click from being overwritten by startup hiding.
+            if (!startupUiReady)
             {
-                ShowForm();
+                trayShowPending = true;
+                return;
+            }
+
+            // Defer the actual show until the NotifyIcon mouse message has completed.
+            if (!IsDisposed && !Disposing && IsHandleCreated)
+            {
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (!startupExiting && !IsDisposed && !Disposing)
+                            ShowForm();
+                    });
+                }
+                catch (InvalidOperationException) { }
             }
         }
 
@@ -1448,27 +1482,21 @@ namespace v2rayN.Forms
 
         private void ShowForm()
         {
-            if (IsDisposed || Disposing)
-            {
+            if (IsDisposed || Disposing || !IsHandleCreated || !startupUiReady)
                 return;
-            }
 
-            // Set the taskbar state and restore the window before showing it.
-            // Show() already updates the WinForms visibility state; calling
-            // SetVisibleCore() again here can cause redundant native show/hide messages.
-            this.ShowInTaskbar = true;
-            if (this.WindowState == FormWindowState.Minimized)
-            {
-                this.WindowState = FormWindowState.Normal;
-            }
+            // Restore the taskbar entry and window state before making it visible.
+            ShowInTaskbar = true;
+            if (WindowState == FormWindowState.Minimized)
+                WindowState = FormWindowState.Normal;
 
-            if (!this.Visible)
-            {
-                this.Show();
-            }
+            if (!Visible)
+                Show();
 
-            this.Activate();
-            this.txtMsgBox.ScrollToCaret();
+            // Activate only after the form is visible and in its normal state.
+            Activate();
+            BringToFront();
+            txtMsgBox.ScrollToCaret();
         }
 
         private void HideForm()
