@@ -34,6 +34,9 @@ namespace v2rayN.Forms
         {
             InitializeComponent();
 
+            // Save the user's complete proxy state before startup logic can change it.
+            SysProxyHandle.CaptureOriginalSettings();
+
             // Show a usable tray icon immediately; do not wait for the core to become ready.
             notifyMain.Icon = this.Icon ?? SystemIcons.Application;
             notifyMain.Text = UIRes.I18N("AppStarting");
@@ -154,15 +157,9 @@ namespace v2rayN.Forms
                 if (v2rayHandler != null)
                     v2rayHandler.V2rayStop();
 
-                //HttpProxyHandle.CloseHttpAgent(config);
-                if (blWindowsShutDown)
-                {
-                    HttpProxyHandle.ResetIEProxy4WindowsShutDown();
-                }
-                else
-                {
-                    HttpProxyHandle.UpdateSysProxy(config, true);
-                }
+                // Restore the exact proxy state that was present when v2rayN started.
+                // This also covers Windows shutdown and is safe if exit is signaled twice.
+                SysProxyHandle.RestoreOriginalSettings();
 
                 ConfigHandler.SaveConfig(ref config);
                 statistics?.SaveToFile();
