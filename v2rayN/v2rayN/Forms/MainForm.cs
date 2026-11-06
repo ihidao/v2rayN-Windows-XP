@@ -1528,12 +1528,13 @@ namespace v2rayN.Forms
                 return;
             }
 
-            // Keep the tray icon available before removing the window from the taskbar.
+            // Hiding the form is enough to remove its taskbar button.
+            // Do not change ShowInTaskbar here: changing it after handle creation
+            // recreates the native window handle and can cause visible flicker on Windows XP.
             if (!this.notifyMain.Visible)
             {
                 this.notifyMain.Visible = true;
             }
-            this.ShowInTaskbar = false;
             if (this.Visible)
             {
                 this.Hide();
