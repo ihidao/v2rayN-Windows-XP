@@ -343,7 +343,7 @@
     <value>PAC failed to start. Run it with Admin right.</value>
   </data>
   <data name="StartService" xml:space="preserve">
-    <value>Start service ({0})...</value>
+    <value>Start service...</value>
   </data>
   <data name="SuccessfulConfiguration" xml:space="preserve">
     <value>Successful configuration
