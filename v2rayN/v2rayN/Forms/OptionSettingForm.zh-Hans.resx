@@ -327,7 +327,7 @@
     <value>14</value>
   </data>
   <data name="chkShowAccessLogs.Text" xml:space="preserve">
-    <value>显示访问日志</value>
+    <value>显示access日志</value>
   </data>
   <data name="&gt;&gt;chkShowAccessLogs.Name" xml:space="preserve">
     <value>chkShowAccessLogs</value>
