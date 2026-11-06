@@ -1317,73 +1317,9 @@ namespace v2rayN.Forms
         /// </summary>
         private string FormatLogLine(string line)
         {
-            if (String.IsNullOrEmpty(line))
-                return line;
-
-            // 核心原生日志格式：yyyy/MM/dd HH:mm:ss [Info|Warning|Error]。
-            // 将旧版 GUI 的横线日期格式规范为斜线日期格式。
-            Match timestampMatch = Regex.Match(line,
-                @"^(\d{4})[-/](\d{2})[-/](\d{2}) (\d{2}:\d{2}:\d{2})(.*)$");
-            if (timestampMatch.Success)
-            {
-                return timestampMatch.Groups[1].Value + "/"
-                    + timestampMatch.Groups[2].Value + "/"
-                    + timestampMatch.Groups[3].Value + " "
-                    + timestampMatch.Groups[4].Value
-                    + timestampMatch.Groups[5].Value;
-            }
-
-            // 兼容旧版测速日志，并转换为内核时间戳格式。
-            Match legacySpeedtest = Regex.Match(line,
-                @"^\[(\d{2}:\d{2}:\d{2})\] \[(INFO|WARNING|ERROR)\](.*)$",
-                RegexOptions.IgnoreCase);
-            if (legacySpeedtest.Success)
-            {
-                string legacyLevel = legacySpeedtest.Groups[2].Value;
-                legacyLevel = legacyLevel.Equals("INFO", StringComparison.OrdinalIgnoreCase) ? "Info"
-                    : legacyLevel.Equals("WARNING", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Error";
-                return DateTime.Now.ToString("yyyy/MM/dd") + " "
-                    + legacySpeedtest.Groups[1].Value + " [" + legacyLevel + "]"
-                    + legacySpeedtest.Groups[3].Value;
-            }
-
-            string lower = line.ToLowerInvariant();
-            string level = "Info";
-            if (lower.IndexOf("[fatal]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("panic:", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("失败", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("错误", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("无法", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("异常", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("未能", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("failed", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("exception", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("unable", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("cannot", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("timed out", StringComparison.Ordinal) >= 0)
-                level = "Error";
-            else if (lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("警告", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("核心未就绪", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("已退出", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("not ready", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("still running", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("exited", StringComparison.Ordinal) >= 0)
-                level = "Warning";
-
-            // 已有等级时只补时间戳，避免重复添加 [Error]/[Warning]。
-            if (lower.IndexOf("[debug]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[info]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[error]", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("[fatal]", StringComparison.Ordinal) >= 0)
-                return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line;
-
-            return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")
-                + " [" + level + "] " + line;
+            // 保留 v2rayN 原始提示和内核原生输出，不额外添加时间戳或日志等级。
+            // 真连接测速日志也保持测速模块自身生成的格式。
+            return line;
         }
 
         /// <summary>
