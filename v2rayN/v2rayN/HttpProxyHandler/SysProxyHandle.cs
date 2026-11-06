@@ -1,199 +1,211 @@
+﻿
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using Microsoft.Win32;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+using v2rayN.Mode;
+using v2rayN.Properties;
 using v2rayN.Tool;
 
 namespace v2rayN.HttpProxyHandler
 {
     public static class SysProxyHandle
     {
-        private const string InternetSettingsPath = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
-        private static readonly string[] ProxyValueNames = new string[]
+        //private const string _userWininetConfigFile = "user-wininet.json";
+
+        //private static string _queryStr;
+
+        // In general, this won't change
+        // format:
+        //  <flags><CR-LF>
+        //  <proxy-server><CR-LF>
+        //  <bypass-list><CR-LF>
+        //  <pac-url>
+        private static SysproxyConfig _userSettings = null;
+
+        enum RET_ERRORS : int
         {
-            "ProxyEnable", "ProxyServer", "ProxyOverride", "AutoConfigURL", "AutoDetect"
+            RET_NO_ERROR = 0,
+            INVALID_FORMAT = 1,
+            NO_PERMISSION = 2,
+            SYSCALL_FAILED = 3,
+            NO_MEMORY = 4,
+            INVAILD_OPTION_COUNT = 5,
         };
 
-        private class SavedValue
+        static SysProxyHandle()
         {
-            public bool Exists;
-            public object Value;
-            public RegistryValueKind Kind;
-        }
-
-        private static Dictionary<string, SavedValue> _originalValues;
-        private static bool _settingsCaptured;
-
-        [DllImport("wininet.dll", SetLastError = true)]
-        private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
-
-        /// <summary>
-        /// Capture the current user's proxy settings once, before v2rayN changes them.
-        /// </summary>
-        public static void CaptureOriginalSettings()
-        {
-            if (_settingsCaptured) return;
-
             try
             {
-                Dictionary<string, SavedValue> values = new Dictionary<string, SavedValue>();
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(InternetSettingsPath, false))
-                {
-                    foreach (string name in ProxyValueNames)
-                    {
-                        SavedValue saved = new SavedValue();
-                        if (key != null)
-                        {
-                            try
-                            {
-                                saved.Value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-                                saved.Exists = saved.Value != null;
-                                if (saved.Exists)
-                                    saved.Kind = key.GetValueKind(name);
-                            }
-                            catch { saved.Exists = false; }
-                        }
-                        values[name] = saved;
-                    }
-                }
-                _originalValues = values;
-                _settingsCaptured = true;
+                FileManager.UncompressFile(Utils.GetTempPath("sysproxy.exe"),
+                    Environment.Is64BitOperatingSystem ? Resources.sysproxy64_exe : Resources.sysproxy_exe);
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Utils.SaveLog("Capture original system proxy failed: " + ex.Message, ex);
+                Utils.SaveLog(ex.Message, ex);
             }
-        }
-
-        private static RegistryKey OpenSettingsKey()
-        {
-            RegistryKey key = Registry.CurrentUser.OpenSubKey(InternetSettingsPath, true);
-            if (key == null)
-                key = Registry.CurrentUser.CreateSubKey(InternetSettingsPath);
-            if (key == null)
-                throw new InvalidOperationException("Cannot open the current user's Internet Settings registry key.");
-            return key;
-        }
-
-        private static void NotifyInternetSettingsChanged()
-        {
-            // INTERNET_OPTION_SETTINGS_CHANGED = 39; INTERNET_OPTION_REFRESH = 37.
-            InternetSetOption(IntPtr.Zero, 39, IntPtr.Zero, 0);
-            InternetSetOption(IntPtr.Zero, 37, IntPtr.Zero, 0);
-        }
-
-        private static void ApplyGlobalProxy(string proxyServer, string bypassList)
-        {
-            if (String.IsNullOrEmpty(proxyServer))
-                throw new ArgumentException("Proxy server address is empty.", "proxyServer");
-
-            CaptureOriginalSettings();
-            using (RegistryKey key = OpenSettingsKey())
-            {
-                key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
-                key.SetValue("ProxyServer", proxyServer, RegistryValueKind.String);
-                key.SetValue("ProxyOverride", bypassList ?? String.Empty, RegistryValueKind.String);
-                key.DeleteValue("AutoConfigURL", false);
-            }
-            NotifyInternetSettingsChanged();
-        }
-
-        private static void ApplyPac(string pacUrl)
-        {
-            if (String.IsNullOrEmpty(pacUrl))
-                throw new ArgumentException("PAC URL is empty.", "pacUrl");
-
-            CaptureOriginalSettings();
-            using (RegistryKey key = OpenSettingsKey())
-            {
-                key.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
-                key.SetValue("AutoConfigURL", pacUrl, RegistryValueKind.String);
-            }
-            NotifyInternetSettingsChanged();
         }
 
         public static void SetIEProxy(bool enable, bool global, string strProxy)
         {
-            if (!enable)
+            //Read();
+
+            //if (!_userSettings.UserSettingsRecorded)
+            //{
+            //    // record user settings
+            //    ExecSysproxy("query");
+            //    //ParseQueryStr(_queryStr);
+            //}
+
+            string arguments;
+            if (enable)
             {
-                RestoreOriginalSettings();
-                return;
+                arguments = global
+                    ? $"global {strProxy} {Global.IEProxyExceptions}"
+                    : $"pac {strProxy}";
+            }
+            else
+            {
+                // restore user settings
+                string flags = _userSettings.Flags;
+                string proxy_server = _userSettings.ProxyServer ?? "-";
+                string bypass_list = _userSettings.BypassList ?? "-";
+                string pac_url = _userSettings.PacUrl ?? "-";
+                arguments = $"set {flags} {proxy_server} {bypass_list} {pac_url}";
+
+                // have to get new settings
+                _userSettings.UserSettingsRecorded = false;
             }
 
-            if (global)
-                ApplyGlobalProxy(strProxy, Global.IEProxyExceptions);
-            else
-                ApplyPac(strProxy);
+            //Save();
+            ExecSysproxy(arguments);
         }
+
 
         public static void SetIEProxy(bool global, string strProxy, string strExceptions)
         {
-            if (global)
+            if (Utils.IsNullOrEmpty(strExceptions))
             {
-                string bypass = String.IsNullOrEmpty(strExceptions)
-                    ? Global.IEProxyExceptions
-                    : Global.IEProxyExceptions + ";" + strExceptions;
-                ApplyGlobalProxy(strProxy, bypass);
+                strExceptions = Global.IEProxyExceptions;
             }
             else
             {
-                ApplyPac(strProxy);
+                strExceptions = $"{Global.IEProxyExceptions};{strExceptions}";
             }
+
+            string arguments = global
+                ? $"global {strProxy} {strExceptions}"
+                : $"pac {strProxy}";
+
+            ExecSysproxy(arguments);
         }
 
+        // set system proxy to 1 (null) (null) (null)
         public static bool ResetIEProxy()
         {
             try
             {
-                using (RegistryKey key = OpenSettingsKey())
-                {
-                    key.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
-                    key.DeleteValue("ProxyServer", false);
-                    key.DeleteValue("ProxyOverride", false);
-                    key.DeleteValue("AutoConfigURL", false);
-                }
-                NotifyInternetSettingsChanged();
-                return true;
+                // clear user-wininet.json
+                //_userSettings = new SysproxyConfig();
+                //Save();
+                // clear system setting
+                ExecSysproxy("set 1 - - -");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Utils.SaveLog("Reset system proxy failed: " + ex.Message, ex);
                 return false;
             }
+
+            return true;
         }
 
-        /// <summary>
-        /// Restore the proxy settings captured when v2rayN started.
-        /// Safe to call more than once during the application exit sequence.
-        /// </summary>
-        public static void RestoreOriginalSettings()
+        private static void ExecSysproxy(string arguments)
         {
-            try
+            // using event to avoid hanging when redirect standard output/error
+            // ref: https://stackoverflow.com/questions/139593/processstartinfo-hanging-on-waitforexit-why
+            // and http://blog.csdn.net/zhangweixing0/article/details/7356841
+            using (AutoResetEvent outputWaitHandle = new AutoResetEvent(false))
+            using (AutoResetEvent errorWaitHandle = new AutoResetEvent(false))
             {
-                // Do not clear the user's proxy when no startup snapshot was captured.
-                if (!_settingsCaptured || _originalValues == null)
-                    return;
-
-                using (RegistryKey key = OpenSettingsKey())
+                using (Process process = new Process())
                 {
-                    foreach (string name in ProxyValueNames)
+                    // Configure the process using the StartInfo properties.
+                    process.StartInfo.FileName = Utils.GetTempPath("sysproxy.exe");
+                    process.StartInfo.Arguments = arguments;
+                    process.StartInfo.WorkingDirectory = Utils.GetTempPath();
+                    process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                    process.StartInfo.UseShellExecute = false;
+                    process.StartInfo.RedirectStandardError = true;
+                    process.StartInfo.RedirectStandardOutput = true;
+
+                    // Need to provide encoding info, or output/error strings we got will be wrong.
+                    process.StartInfo.StandardOutputEncoding = Encoding.Unicode;
+                    process.StartInfo.StandardErrorEncoding = Encoding.Unicode;
+
+                    process.StartInfo.CreateNoWindow = true;
+
+                    StringBuilder output = new StringBuilder();
+                    StringBuilder error = new StringBuilder();
+
+                    process.OutputDataReceived += (sender, e) =>
                     {
-                        SavedValue saved;
-                        if (!_originalValues.TryGetValue(name, out saved) || saved == null || !saved.Exists)
-                            key.DeleteValue(name, false);
+                        if (e.Data == null)
+                        {
+                            outputWaitHandle.Set();
+                        }
                         else
-                            key.SetValue(name, saved.Value, saved.Kind);
+                        {
+                            output.AppendLine(e.Data);
+                        }
+                    };
+                    process.ErrorDataReceived += (sender, e) =>
+                    {
+                        if (e.Data == null)
+                        {
+                            errorWaitHandle.Set();
+                        }
+                        else
+                        {
+                            error.AppendLine(e.Data);
+                        }
+                    };
+                    try
+                    {
+                        process.Start();
+
+                        process.BeginErrorReadLine();
+                        process.BeginOutputReadLine();
+
+                        process.WaitForExit();
                     }
+                    catch (System.ComponentModel.Win32Exception e)
+                    {
+
+                        // log the arguments
+                        throw new Exception(process.StartInfo.Arguments);
+                    }
+                    string stderr = error.ToString();
+                    string stdout = output.ToString();
+
+                    int exitCode = process.ExitCode;
+                    if (exitCode != (int)RET_ERRORS.RET_NO_ERROR)
+                    {
+                        throw new Exception(stderr);
+                    }
+
+                    //if (arguments == "query")
+                    //{
+                    //    if (stdout.IsNullOrWhiteSpace() || stdout.IsNullOrEmpty())
+                    //    {
+                    //        throw new Exception("failed to query wininet settings");
+                    //    }
+                    //    _queryStr = stdout;
+                    //}
                 }
-                _settingsCaptured = false;
-                _originalValues = null;
-                NotifyInternetSettingsChanged();
-            }
-            catch (Exception ex)
-            {
-                Utils.SaveLog("Restore system proxy failed: " + ex.Message, ex);
-                throw;
             }
         }
+
+
     }
 }
