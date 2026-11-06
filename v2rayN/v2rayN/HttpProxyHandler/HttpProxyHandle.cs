@@ -158,22 +158,25 @@ namespace v2rayN.HttpProxyHandler
 
             try
             {
-                Global.httpPort = config.GetLocalPort(Global.InboundHttp);
-                int port = Global.httpPort;
-                if (port <= 0)
-                {
-                    return false;
-                }
                 if (type == ESysProxyType.ForcedChange)
                 {
+                    Global.httpPort = config.GetLocalPort(Global.InboundHttp);
+                    int port = Global.httpPort;
+                    if (port <= 0)
+                    {
+                        return false;
+                    }
+
                     SysProxyHandle.SetIEProxy(true, $"{Global.Loopback}:{port}", config.systemProxyExceptions);
                 }
                 else if (type == ESysProxyType.ForcedClear)
                 {
+                    // Clearing the system proxy does not require a valid HTTP inbound port.
                     SysProxyHandle.ResetIEProxy();
                 }
                 else if (type == ESysProxyType.Unchanged)
                 {
+                    // Preserve the user's existing system proxy settings.
                 }
             }
             catch (Exception ex)
