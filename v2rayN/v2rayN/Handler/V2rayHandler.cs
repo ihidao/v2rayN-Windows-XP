@@ -96,6 +96,21 @@ namespace v2rayN.Handler
                     return;
                 }
 
+                // 按当前配置实际选中的内核可执行文件名清理所有同名进程。
+                // 不检查进程路径：即使进程来自其他目录，也会按用户要求结束。
+                string coreFileName = V2rayFindexe();
+                if (String.IsNullOrEmpty(coreFileName))
+                    return;
+
+                string cleanupMessage;
+                string processName = Path.GetFileNameWithoutExtension(coreFileName);
+                if (!StopAllProcessesByName(processName, out cleanupMessage))
+                {
+                    ShowMsg(false, cleanupMessage);
+                    Utils.SaveLog(cleanupMessage);
+                    return;
+                }
+
                 string conflict;
                 if (FindInboundPortConflict(config, out conflict))
                 {
@@ -277,8 +292,8 @@ namespace v2rayN.Handler
         {
             try
             {
-                // 只停止由当前 V2rayHandler 启动并持有的进程。
-                // 不再按进程名扫描并结束同目录内核，避免误杀其他程序启动/使用的核心。
+                // 先停止由当前 V2rayHandler 启动并持有的进程；
+                // LoadV2ray 随后还会按当前内核名称清理系统中所有同名进程。
                 if (_process != null)
                 {
                     Process oldProcess = _process;
@@ -297,6 +312,76 @@ namespace v2rayN.Handler
             {
                 Utils.SaveLog(ex.Message, ex);
             }
+        }
+
+        /// <summary>
+        /// 无条件结束系统中所有指定名称的内核进程，不检查其可执行文件路径。
+        /// 仅由主内核启动流程调用；真连接测速的独立启动入口不调用此方法。
+        /// </summary>
+        private bool StopAllProcessesByName(string processName, out string message)
+        {
+            message = String.Empty;
+            if (String.IsNullOrEmpty(processName))
+            {
+                message = "无法确定当前内核进程名称，已取消启动。";
+                return false;
+            }
+
+            Process[] processes;
+            try
+            {
+                processes = Process.GetProcessesByName(processName);
+            }
+            catch (Exception ex)
+            {
+                message = "无法枚举同名内核进程 " + processName + ": " + ex.Message;
+                return false;
+            }
+
+            StringBuilder failures = new StringBuilder();
+            foreach (Process process in processes)
+            {
+                int pid = -1;
+                try
+                {
+                    pid = process.Id;
+                    if (!process.HasExited)
+                    {
+                        try { process.CloseMainWindow(); } catch { }
+                        if (!process.WaitForExit(500))
+                        {
+                            process.Kill();
+                            if (!process.WaitForExit(5000))
+                                throw new InvalidOperationException("强制结束后仍未退出。");
+                        }
+                    }
+
+                    if (!process.HasExited)
+                        throw new InvalidOperationException("进程仍在运行。");
+
+                    Utils.SaveLog("[CoreCleanup] Terminated process by name: "
+                        + processName + "; PID=" + pid);
+                }
+                catch (Exception ex)
+                {
+                    failures.AppendLine(processName + " (PID=" + pid + "): " + ex.Message);
+                }
+                finally
+                {
+                    try { process.Dispose(); } catch { }
+                }
+            }
+
+            if (failures.Length > 0)
+            {
+                message = "无法结束全部同名内核进程，已取消本次启动："
+                    + Environment.NewLine + failures.ToString();
+                return false;
+            }
+
+            Utils.SaveLog("[CoreCleanup] Same-name process cleanup complete: "
+                + processName + "; matched=" + processes.Length);
+            return true;
         }
 
         public void V2rayStopPid(int pid)
