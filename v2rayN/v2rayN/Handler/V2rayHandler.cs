@@ -154,6 +154,8 @@ namespace v2rayN.Handler
             }
 
             List<uint> ownerIds = new List<uint>();
+            // 端口归属查询必须完整成功后才能执行清理；如果 TCP/UDP 表查询失败，
+            // 不允许基于不完整信息继续启动，以免漏掉旧核心或误判端口空闲。
             try
             {
                 foreach (TcpOwnerRow row in GetTcpListenerOwners())
@@ -164,13 +166,7 @@ namespace v2rayN.Handler
                         && !ownerIds.Contains(row.owningPid))
                         ownerIds.Add(row.owningPid);
                 }
-            }
-            catch (Exception ex)
-            {
-                Utils.SaveLog("[CoreCleanup] TCP owner enumeration failed: " + ex.Message, ex);
-            }
-            try
-            {
+
                 foreach (UdpOwnerRow row in GetUdpOwners())
                 {
                     int port = GetHostPort(row.localPort);
@@ -182,7 +178,10 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                Utils.SaveLog("[CoreCleanup] UDP owner enumeration failed: " + ex.Message, ex);
+                message = "无法完整读取 Windows TCP/UDP 端口占用信息，已取消内核启动，避免误判端口状态："
+                    + ex.Message;
+                Utils.SaveLog("[CoreCleanup] Port owner enumeration failed; startup aborted: " + ex.Message, ex);
+                return false;
             }
 
             StringBuilder failures = new StringBuilder();
@@ -272,9 +271,10 @@ namespace v2rayN.Handler
         /// <summary>
         /// 检查配置端口的占用者。只报告未被安全清理的外部程序。
         /// </summary>
-        private bool FindInboundPortConflict(Config config, out string message)
+        private bool FindInboundPortConflict(Config config, out string message, out bool inspectionFailed)
         {
             message = String.Empty;
+            inspectionFailed = false;
             if (config == null || config.inbound == null || config.inbound.Count == 0)
                 return false;
 
@@ -302,6 +302,8 @@ namespace v2rayN.Handler
             StringBuilder conflicts = new StringBuilder();
             try
             {
+                // TCP_TABLE_OWNER_PID_LISTENER 只返回 LISTENING，不把 TIME_WAIT
+                // 等非监听状态当作端口冲突。
                 foreach (TcpOwnerRow row in GetTcpListenerOwners())
                 {
                     int port = GetHostPort(row.localPort);
@@ -314,15 +316,8 @@ namespace v2rayN.Handler
 
                     conflicts.AppendLine(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
                 }
-            }
-            catch (Exception ex)
-            {
-                // TCP 查询失败不影响继续查询 UDP，也不阻止核心自行验证绑定。
-                Utils.SaveLog("[PortCheck] Unable to inspect TCP port owners; core will verify binding: " + ex.Message, ex);
-            }
 
-            try
-            {
+                // UDP 没有 LISTENING 状态，按实际绑定端口及 owning PID 判断。
                 foreach (UdpOwnerRow row in GetUdpOwners())
                 {
                     int port = GetHostPort(row.localPort);
@@ -338,8 +333,11 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                // UDP 查询失败不丢弃已经找到的 TCP 冲突。
-                Utils.SaveLog("[PortCheck] Unable to inspect UDP port owners; core will verify binding: " + ex.Message, ex);
+                inspectionFailed = true;
+                message = "无法读取 Windows TCP/UDP 端口占用信息，已取消内核启动，避免把未知状态误判为空闲端口："
+                    + ex.Message;
+                Utils.SaveLog("[PortCheck] Port owner inspection failed; startup aborted: " + ex.Message, ex);
+                return true;
             }
 
             if (conflicts.Length == 0)
@@ -365,13 +363,21 @@ namespace v2rayN.Handler
 
             while (true)
             {
-                if (!FindInboundPortConflict(config, out lastConflict))
+                bool inspectionFailed;
+                if (!FindInboundPortConflict(config, out lastConflict, out inspectionFailed))
                 {
                     if (waitWatch.ElapsedMilliseconds > 0)
                         Utils.SaveLog("[PortCheck] Configured inbound ports released after "
                             + waitWatch.ElapsedMilliseconds + " ms.");
                     message = String.Empty;
                     return false;
+                }
+
+                // 查询失败不是普通端口冲突：立即中止，不继续等待或启动。
+                if (inspectionFailed)
+                {
+                    message = lastConflict;
+                    return true;
                 }
 
                 if (waitWatch.ElapsedMilliseconds >= timeoutMs)
@@ -846,6 +852,26 @@ namespace v2rayN.Handler
         private bool IsAnyPortReady(List<int> ports, int processId)
         {
             if (ports == null || ports.Count == 0) return false;
+
+            // PID 必须对应当前安装目录中的受管理核心程序；避免仅凭端口号
+            // 或可连接状态，把其他进程误认为本次启动的内核。
+            Process startedCore = null;
+            try
+            {
+                startedCore = Process.GetProcessById(processId);
+                if (!IsManagedCoreProcess(startedCore) || startedCore.HasExited)
+                    return false;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (startedCore != null)
+                    try { startedCore.Dispose(); } catch { }
+            }
+
             List<TcpOwnerRow> tcpOwners;
             List<UdpOwnerRow> udpOwners;
             try
