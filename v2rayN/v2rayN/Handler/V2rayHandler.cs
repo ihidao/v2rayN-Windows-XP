@@ -303,6 +303,7 @@ namespace v2rayN.Handler
             }
 
             StringBuilder conflicts = new StringBuilder();
+            HashSet<string> reportedConflicts = new HashSet<string>();
             try
             {
                 // TCP_TABLE_OWNER_PID_LISTENER 只返回 LISTENING，不把 TIME_WAIT
@@ -317,8 +318,12 @@ namespace v2rayN.Handler
                     if (!IsAddressConflict(listenAddress, boundAddress))
                         continue;
 
-                    if (conflicts.Length > 0) conflicts.Append(" | ");
-                    conflicts.Append(FormatPortOwner(port, row.owningPid));
+                    string ownerDetails = FormatPortOwner(port, row.owningPid);
+                    if (reportedConflicts.Add(ownerDetails))
+                    {
+                        if (conflicts.Length > 0) conflicts.Append(" | ");
+                        conflicts.Append(ownerDetails);
+                    }
                 }
 
                 // UDP 没有 LISTENING 状态，按实际绑定端口及 owning PID 判断。
@@ -332,8 +337,12 @@ namespace v2rayN.Handler
                     if (!IsAddressConflict(listenAddress, boundAddress))
                         continue;
 
-                    if (conflicts.Length > 0) conflicts.Append(" | ");
-                    conflicts.Append(FormatPortOwner(port, row.owningPid));
+                    string ownerDetails = FormatPortOwner(port, row.owningPid);
+                    if (reportedConflicts.Add(ownerDetails))
+                    {
+                        if (conflicts.Length > 0) conflicts.Append(" | ");
+                        conflicts.Append(ownerDetails);
+                    }
                 }
             }
             catch (Exception ex)
