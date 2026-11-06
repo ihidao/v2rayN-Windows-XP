@@ -32,6 +32,10 @@ namespace v2rayN.Forms
 
         public MainForm()
         {
+            // v2rayN GUI 优先级设为 High，确保界面、托盘和控制逻辑优先响应。
+            // 不使用 RealTime，避免抢占系统关键线程导致系统卡顿。
+            try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High; } catch { }
+
             InitializeComponent();
 
             // Show a usable tray icon immediately; do not wait for the core to become ready.
