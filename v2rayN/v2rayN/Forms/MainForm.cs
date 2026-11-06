@@ -1515,10 +1515,16 @@ namespace v2rayN.Forms
             if (WindowState == FormWindowState.Minimized)
                 WindowState = FormWindowState.Normal;
 
-            // Activate only after the form is visible and in its normal state.
+            // Finish layout and paint the form and its child controls before
+            // activating it, reducing the blank-client-area flash on Windows XP.
+            PerformLayout();
+            txtMsgBox.ScrollToCaret();
+            Invalidate(true);
+            Update();
+
+            // Activate only after the window contents have been synchronously redrawn.
             Activate();
             BringToFront();
-            txtMsgBox.ScrollToCaret();
         }
 
         private void HideForm()
