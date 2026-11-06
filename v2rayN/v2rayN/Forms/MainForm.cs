@@ -1323,7 +1323,11 @@ namespace v2rayN.Forms
 
             // Keep v2rayN service-start/status messages in the original GUI style:
             // timestamp + message, without adding an artificial [INFO] level.
-            string startServicePrefix = UIRes.I18N("StartService").Split('{')[0];
+            string startServiceTemplate = UIRes.I18N("StartService");
+            int placeholderIndex = startServiceTemplate.IndexOf("{0}", StringComparison.Ordinal);
+            string startServicePrefix = placeholderIndex >= 0
+                ? startServiceTemplate.Substring(0, placeholderIndex)
+                : startServiceTemplate;
             if ((!String.IsNullOrEmpty(startServicePrefix)
                     && line.StartsWith(startServicePrefix, StringComparison.OrdinalIgnoreCase))
                 || line.IndexOf(" started successfully (PID=", StringComparison.OrdinalIgnoreCase) >= 0)
