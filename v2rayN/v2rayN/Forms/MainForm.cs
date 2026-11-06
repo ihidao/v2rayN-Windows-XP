@@ -1292,6 +1292,10 @@ namespace v2rayN.Forms
                 bool hasVisibleLine = false;
                 for (int i = 0; i < lines.Length; i++)
                 {
+                    if (config != null && config.showAccessLogs == false
+                        && IsAccessLogLine(lines[i]))
+                        continue;
+
                     string displayLine = FormatLogLine(lines[i]);
                     if (String.IsNullOrEmpty(displayLine)
                         || !ShouldShowLogLevelLine(displayLine))
@@ -1374,6 +1378,19 @@ namespace v2rayN.Forms
 
             return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")
                 + " [" + level + "] " + line;
+        }
+
+        /// <summary>
+        /// Identify V2Ray access log records. This filter is independent of loglevel.
+        /// </summary>
+        private bool IsAccessLogLine(string line)
+        {
+            if (String.IsNullOrEmpty(line))
+                return false;
+
+            return Regex.IsMatch(line,
+                @"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} .*\b(accepted|rejected)\b",
+                RegexOptions.IgnoreCase);
         }
 
         /// <summary>
