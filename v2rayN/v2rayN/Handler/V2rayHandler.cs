@@ -642,7 +642,7 @@ namespace v2rayN.Handler
 
         // Wait for the core's own startup message, then briefly verify the SOCKS listener.
         // Both output streams are consumed asynchronously to avoid pipe deadlocks.
-        private Process TryStartCore(string fileName, string arguments, List<int> ports,
+        private Process TryStartCore(string fileName, string arguments, List<int> ports, bool checkUdp,
             out string failure, out long startupElapsedMs, out string coreNameVersion,
             out bool canFallback)
         {
@@ -731,7 +731,7 @@ namespace v2rayN.Handler
                     for (int elapsed = 0; elapsed < 10000; elapsed += 50)
                     {
                         if (p.HasExited) break;
-                        if (IsAnyPortReady(ports, p.Id) && !p.HasExited)
+                        if (IsAnyPortReady(ports, p.Id, checkUdp) && !p.HasExited)
                         {
                             startupElapsedMs = startupWatch.ElapsedMilliseconds;
                             coreNameVersion = detectedCoreNameVersion;
@@ -848,7 +848,7 @@ namespace v2rayN.Handler
             return false;
         }
 
-        private bool IsAnyPortReady(List<int> ports, int processId)
+        private bool IsAnyPortReady(List<int> ports, int processId, bool checkUdp)
         {
             if (ports == null || ports.Count == 0) return false;
 
@@ -876,7 +876,7 @@ namespace v2rayN.Handler
             try
             {
                 tcpOwners = GetTcpListenerOwners();
-                udpOwners = readinessUdpPorts.Count > 0 ? GetUdpOwners() : new List<UdpOwnerRow>();
+                udpOwners = checkUdp && readinessUdpPorts.Count > 0 ? GetUdpOwners() : new List<UdpOwnerRow>();
             }
             catch (Exception ex)
             {
@@ -898,26 +898,29 @@ namespace v2rayN.Handler
                 if (!ownedByStartedCore)
                     continue;
 
-                bool udpReady = true;
-                foreach (int udpPort in readinessUdpPorts)
+                if (checkUdp)
                 {
-                    bool udpOwnedByStartedCore = false;
-                    foreach (UdpOwnerRow owner in udpOwners)
+                    bool udpReady = true;
+                    foreach (int udpPort in readinessUdpPorts)
                     {
-                        if (GetHostPort(owner.localPort) == udpPort && owner.owningPid == (uint)processId)
+                        bool udpOwnedByStartedCore = false;
+                        foreach (UdpOwnerRow owner in udpOwners)
                         {
-                            udpOwnedByStartedCore = true;
+                            if (GetHostPort(owner.localPort) == udpPort && owner.owningPid == (uint)processId)
+                            {
+                                udpOwnedByStartedCore = true;
+                                break;
+                            }
+                        }
+                        if (!udpOwnedByStartedCore)
+                        {
+                            udpReady = false;
                             break;
                         }
                     }
-                    if (!udpOwnedByStartedCore)
-                    {
-                        udpReady = false;
-                        break;
-                    }
+                    if (!udpReady)
+                        continue;
                 }
-                if (!udpReady)
-                    continue;
 
                 try
                 {
@@ -932,7 +935,7 @@ namespace v2rayN.Handler
             return false;
         }
 
-        private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports,
+        private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports, bool checkUdp,
             out string failure, out long startupElapsedMs, out bool usedLegacyArguments,
             out string coreNameVersion)
         {
@@ -945,7 +948,7 @@ namespace v2rayN.Handler
             long attempt5Ms;
             string version5;
             bool canTryLegacy;
-            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports,
+            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports, checkUdp,
                 out error5, out attempt5Ms, out version5, out canTryLegacy);
             if (p != null)
             {
@@ -976,7 +979,7 @@ namespace v2rayN.Handler
             long attempt4Ms;
             string version4;
             bool unusedCanFallback;
-            p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports,
+            p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports, checkUdp,
                 out error4, out attempt4Ms, out version4, out unusedCanFallback);
             totalWatch.Stop();
             startupElapsedMs = totalWatch.ElapsedMilliseconds;
@@ -1011,7 +1014,7 @@ namespace v2rayN.Handler
                 bool usedLegacyArguments;
                 string coreNameVersion;
                 Process p = StartCoreWithFallback(fileName,
-                    Utils.GetPath(v2rayConfigRes), readinessPorts, out failure,
+                    Utils.GetPath(v2rayConfigRes), readinessPorts, true, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
                     throw new Exception(failure);
@@ -1047,7 +1050,7 @@ namespace v2rayN.Handler
                 long startupElapsedMs;
                 bool usedLegacyArguments;
                 string coreNameVersion;
-                p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure,
+                p = StartCoreWithFallback(fileName, tempConfigFile, ports, false, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
                     throw new Exception(UIRes.I18N("SpeedtestCoreStartFailed") + failure);
