@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -16,40 +15,17 @@ namespace v2rayN.Handler
         private V2rayHandler _v2rayHandler;
         private List<int> _selecteds;
         Action<int, string> _updateFunc;
-        Action<string> _logFunc;
-
-        private void LogProgress(string message, string level = "INFO")
-        {
-            try
-            {
-                if (_logFunc != null)
-                {
-                    string normalizedLevel = level.Equals("ERROR", StringComparison.OrdinalIgnoreCase)
-                        ? "Error" : level.Equals("WARNING", StringComparison.OrdinalIgnoreCase)
-                            ? "Warning" : "Info";
-                    string logLine = string.Format("{0} [{1}] [Speedtest] {2}",
-                        DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"), normalizedLevel, message);
-                    _logFunc(logLine + Environment.NewLine);
-                }
-            }
-            catch (Exception ex)
-            {
-                Utils.SaveLog("Speedtest", ex);
-            }
-        }
-
         public SpeedtestHandler(ref Config config)
         {
             _config = config;
         }
 
-        public SpeedtestHandler(ref Config config, ref V2rayHandler v2rayHandler, List<int> selecteds, string actionType, Action<int, string> update, Action<string> log = null)
+        public SpeedtestHandler(ref Config config, ref V2rayHandler v2rayHandler, List<int> selecteds, string actionType, Action<int, string> update)
         {
             _config = config;
             _v2rayHandler = v2rayHandler;
             _selecteds = Utils.DeepCopy(selecteds);
             _updateFunc = update;
-            _logFunc = log;
 
             if (actionType == "ping")
             {
@@ -115,78 +91,61 @@ namespace v2rayN.Handler
         private void RunRealPing()
         {
             int pid = -1;
-            Stopwatch totalWatch = Stopwatch.StartNew();
             try
             {
                 Dictionary<int, int> speedTestPorts;
-                LogProgress(UIRes.I18N("SpeedtestStartingCore"));
                 pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
                 if (pid < 0)
                 {
-                    string failure = UIRes.I18N("OperationFailed");
-                    LogProgress(UIRes.I18N("SpeedtestCoreStartFailedLog") + failure, "ERROR");
                     if (_selecteds.Count > 0)
-                        _updateFunc(_selecteds[0], failure);
+                        _updateFunc(_selecteds[0], UIRes.I18N("OperationFailed"));
                     return;
                 }
-                LogProgress(UIRes.I18N("SpeedtestCoreStarted") + pid);
 
                 List<Task> tasks = new List<Task>();
                 foreach (int itemIndex in _selecteds)
                 {
                     if (_config.vmess[itemIndex].configType == (int)EConfigType.Custom)
                     {
-                        LogProgress(UIRes.I18N("SpeedtestSkipCustomConfig") + _config.vmess[itemIndex].remarks);
                         continue;
                     }
 
-                    int capturedIndex = itemIndex;
-                    string serverName = _config.vmess[capturedIndex].remarks;
-                    tasks.Add(Task.Factory.StartNew(() =>
+                    tasks.Add(Task.Run(() =>
                     {
-                        Stopwatch itemWatch = Stopwatch.StartNew();
                         try
                         {
-                            LogProgress(UIRes.I18N("SpeedtestTestingNode") + serverName);
                             int localTestPort;
-                            if (!speedTestPorts.TryGetValue(capturedIndex, out localTestPort))
+                            if (!speedTestPorts.TryGetValue(itemIndex, out localTestPort))
                             {
-                                _updateFunc(capturedIndex, UIRes.I18N("SpeedtestPortAllocationFailed"));
-                                LogProgress(String.Format(UIRes.I18N("SpeedtestNodePortFailed"), serverName), "ERROR");
+                                _updateFunc(itemIndex, UIRes.I18N("OperationFailed"));
                                 return;
                             }
+
                             WebProxy webProxy = new WebProxy(Global.Loopback, localTestPort);
                             int responseTime = -1;
                             string status = GetRealPingTime(_config.speedPingTestUrl, webProxy, out responseTime);
-                            string output = Utils.IsNullOrEmpty(status) ? FormatOut(responseTime, "ms") : FormatOut(status, "");
-                            _updateFunc(capturedIndex, output);
-                            LogProgress(String.Format(UIRes.I18N("SpeedtestNodeTestResultPrefix"), serverName) + output.Trim()
-                                + (Utils.IsNullOrEmpty(status) ? String.Format(UIRes.I18N("SpeedtestElapsedSuffix"), itemWatch.ElapsedMilliseconds)
-                                    : String.Format(UIRes.I18N("SpeedtestFailureReasonSuffix"), status)));
+                            string output = Utils.IsNullOrEmpty(status)
+                                ? FormatOut(responseTime, "ms")
+                                : FormatOut(status, "");
+                            _updateFunc(itemIndex, output);
                         }
                         catch (Exception ex)
                         {
-                            _updateFunc(capturedIndex, UIRes.I18N("SpeedtestErrorShort"));
-                            Utils.SaveLog("Real ping task failed for " + serverName + ": " + ex.ToString(), ex);
-                            LogProgress(String.Format(UIRes.I18N("SpeedtestNodeError"), serverName, ex.Message), "ERROR");
+                            Utils.SaveLog(ex.Message, ex);
                         }
                     }));
                 }
+
                 Task.WaitAll(tasks.ToArray());
             }
             catch (Exception ex)
             {
-                Utils.SaveLog("Real ping failed: " + ex.ToString(), ex);
-                LogProgress(UIRes.I18N("SpeedtestUnexpectedError") + ex.Message, "ERROR");
+                Utils.SaveLog(ex.Message, ex);
             }
             finally
             {
                 if (pid > 0)
-                {
                     _v2rayHandler.V2rayStopPid(pid);
-                }
-                totalWatch.Stop();
-                LogProgress(String.Format(UIRes.I18N("SpeedtestCompletedFormat"), totalWatch.ElapsedMilliseconds));
             }
         }
 
