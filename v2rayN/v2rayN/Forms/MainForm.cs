@@ -1320,26 +1320,32 @@ namespace v2rayN.Forms
             if (String.IsNullOrEmpty(line))
                 return line;
 
-            // 已经有完整日期时间戳，保持核心原始输出。
-            if (Regex.IsMatch(line, @"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}"))
-                return line;
+            // 核心原生日志格式：yyyy/MM/dd HH:mm:ss [Info|Warning|Error]。
+            // 将旧版 GUI 的横线日期格式规范为斜线日期格式。
+            Match timestampMatch = Regex.Match(line,
+                @"^(\d{4})[-/](\d{2})[-/](\d{2}) (\d{2}:\d{2}:\d{2})(.*)$");
+            if (timestampMatch.Success)
+            {
+                return timestampMatch.Groups[1].Value + "/"
+                    + timestampMatch.Groups[2].Value + "/"
+                    + timestampMatch.Groups[3].Value + " "
+                    + timestampMatch.Groups[4].Value
+                    + timestampMatch.Groups[5].Value;
+            }
 
-            // Keep v2rayN service-start/status messages in the original GUI style:
-            // timestamp + message, without adding an artificial [INFO] level.
-            string startServiceTemplate = UIRes.I18N("StartService");
-            int placeholderIndex = startServiceTemplate.IndexOf("{0}", StringComparison.Ordinal);
-            string startServicePrefix = placeholderIndex >= 0
-                ? startServiceTemplate.Substring(0, placeholderIndex)
-                : startServiceTemplate;
-            if ((!String.IsNullOrEmpty(startServicePrefix)
-                    && line.StartsWith(startServicePrefix, StringComparison.OrdinalIgnoreCase))
-                || line.IndexOf(" started successfully (PID=", StringComparison.OrdinalIgnoreCase) >= 0)
-                return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line;
-
-            // 真连接测速模块已有自己的时分秒与等级格式。
-            if (Regex.IsMatch(line, @"^\[\d{2}:\d{2}:\d{2}\] \[(INFO|WARNING|ERROR)\]",
-                RegexOptions.IgnoreCase))
-                return line;
+            // 兼容旧版测速日志，并转换为内核时间戳格式。
+            Match legacySpeedtest = Regex.Match(line,
+                @"^\[(\d{2}:\d{2}:\d{2})\] \[(INFO|WARNING|ERROR)\](.*)$",
+                RegexOptions.IgnoreCase);
+            if (legacySpeedtest.Success)
+            {
+                string legacyLevel = legacySpeedtest.Groups[2].Value;
+                legacyLevel = legacyLevel.Equals("INFO", StringComparison.OrdinalIgnoreCase) ? "Info"
+                    : legacyLevel.Equals("WARNING", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Error";
+                return DateTime.Now.ToString("yyyy/MM/dd") + " "
+                    + legacySpeedtest.Groups[1].Value + " [" + legacyLevel + "]"
+                    + legacySpeedtest.Groups[3].Value;
+            }
 
             string lower = line.ToLowerInvariant();
             string level = "Info";
