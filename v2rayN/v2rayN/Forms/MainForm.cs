@@ -94,38 +94,58 @@ namespace v2rayN.Forms
 
         private void MainForm_Shown(object sender, EventArgs e)
         {
-            // Hide the initial Application.Run() display before accepting tray requests.
-            // The tray icon is already available, and core startup remains independent.
-            HideForm();
-            StartInitialV2ray();
-
             try
             {
+                // Hide the initial Application.Run() display before accepting tray requests.
+                // The tray icon is already available, and core startup remains independent.
+                HideForm();
+
+                // A core-startup exception must not prevent the main window from becoming usable.
+                try
+                {
+                    StartInitialV2ray();
+                }
+                catch (Exception ex)
+                {
+                    Utils.SaveLog("Initial core startup scheduling failed: " + ex.Message, ex);
+                }
+
                 Stopwatch sw = Stopwatch.StartNew();
-                InitServersView();
-                RefreshServers();
-                RefreshRoutingsMenu();
-                RestoreUI();
-                sw.Stop();
-                Utils.SaveLog("[Startup] UI server/routing initialization: "
-                    + sw.ElapsedMilliseconds + " ms");
+                try
+                {
+                    InitServersView();
+                    RefreshServers();
+                    RefreshRoutingsMenu();
+                    RestoreUI();
+                    sw.Stop();
+                    Utils.SaveLog("[Startup] UI server/routing initialization: "
+                        + sw.ElapsedMilliseconds + " ms");
+                }
+                catch (Exception ex)
+                {
+                    Utils.SaveLog("UI initialization failed: " + ex.Message, ex);
+                }
             }
             catch (Exception ex)
             {
-                Utils.SaveLog("UI initialization failed: " + ex.Message, ex);
+                Utils.SaveLog("Main window startup failed: " + ex.Message, ex);
             }
             finally
             {
-                // Mark the window ready only after its controls and saved layout are ready.
+                // Always release queued tray requests, even if core startup or UI setup fails.
                 startupUiReady = true;
-                if (trayShowPending)
+                if (trayShowPending && !startupExiting && !IsDisposed && !Disposing)
                 {
                     trayShowPending = false;
-                    BeginInvoke((MethodInvoker)delegate
+                    try
                     {
-                        if (!startupExiting && !IsDisposed && !Disposing)
-                            ShowForm();
-                    });
+                        BeginInvoke((MethodInvoker)delegate
+                        {
+                            if (!startupExiting && !IsDisposed && !Disposing)
+                                ShowForm();
+                        });
+                    }
+                    catch (InvalidOperationException) { }
                 }
             }
         }
@@ -1485,13 +1505,15 @@ namespace v2rayN.Forms
             if (IsDisposed || Disposing || !IsHandleCreated || !startupUiReady)
                 return;
 
-            // Restore the taskbar entry and window state before making it visible.
+            // Restore the taskbar entry, show the form, then restore its state.
+            // On Windows XP, restoring a hidden form before Show() can leave it
+            // logically minimized; the taskbar button then appears but the form does not.
             ShowInTaskbar = true;
-            if (WindowState == FormWindowState.Minimized)
-                WindowState = FormWindowState.Normal;
-
             if (!Visible)
                 Show();
+
+            if (WindowState == FormWindowState.Minimized)
+                WindowState = FormWindowState.Normal;
 
             // Activate only after the form is visible and in its normal state.
             Activate();
