@@ -1415,7 +1415,7 @@ namespace v2rayN.Handler
                     if (speedTestPorts == null || !speedTestPorts.TryGetValue(index, out localPort)
                         || localPort <= 0)
                     {
-                        msg = "无法分配测速端口";
+                        msg = UIRes.I18N("SpeedtestPortAllocateFailed");
                         return "";
                     }
 

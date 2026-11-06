@@ -96,7 +96,7 @@ namespace v2rayN.Handler
                 // Do not start a second core while the previous process is still alive.
                 if (IsCoreRunning)
                 {
-                    string stopMessage = "旧内核进程尚未完全退出，已取消本次启动。请稍后重试。";
+                    string stopMessage = UIRes.I18N("OldCoreStillExiting");
                     ShowMsg(false, stopMessage);
                     Utils.SaveLog(stopMessage);
                     return;
@@ -178,7 +178,7 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                message = "无法完整读取 Windows TCP/UDP 端口占用信息，已取消内核启动，避免误判端口状态："
+                message = UIRes.I18N("PortTableReadFailedCleanup")
                     + ex.Message;
                 Utils.SaveLog("[CoreCleanup] Port owner enumeration failed; startup aborted: " + ex.Message, ex);
                 return false;
@@ -206,11 +206,11 @@ namespace v2rayN.Handler
                         {
                             owner.Kill();
                             if (!owner.WaitForExit(5000))
-                                throw new InvalidOperationException("强制结束后仍未退出。");
+                                throw new InvalidOperationException(UIRes.I18N("ForcedStopStillRunning"));
                         }
                     }
                     if (!owner.HasExited)
-                        throw new InvalidOperationException("进程仍在运行。");
+                        throw new InvalidOperationException(UIRes.I18N("ProcessStillRunning"));
                     Utils.SaveLog("[CoreCleanup] Terminated managed core occupying inbound port: "
                         + processName + "; PID=" + ownerId);
                 }
@@ -230,7 +230,7 @@ namespace v2rayN.Handler
 
             if (failures.Length > 0)
             {
-                message = "无法结束占用入站端口的受管理内核进程，已取消启动："
+                message = UIRes.I18N("ManagedCoreStopFailed")
                     + Environment.NewLine + failures.ToString();
                 return false;
             }
@@ -334,7 +334,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 inspectionFailed = true;
-                message = "无法读取 Windows TCP/UDP 端口占用信息，已取消内核启动，避免把未知状态误判为空闲端口："
+                message = UIRes.I18N("PortTableReadFailed")
                     + ex.Message;
                 Utils.SaveLog("[PortCheck] Port owner inspection failed; startup aborted: " + ex.Message, ex);
                 return true;
@@ -343,9 +343,9 @@ namespace v2rayN.Handler
             if (conflicts.Length == 0)
                 return false;
 
-            message = "检测到 v2rayN 配置的本地端口仍被其他进程占用："
+            message = UIRes.I18N("InboundPortConflictPrefix")
                 + Environment.NewLine + conflicts.ToString()
-                + "请关闭对应程序或修改 v2rayN 的本地入站端口。为避免误杀其他软件，v2rayN 不会结束这些外部进程。";
+                + UIRes.I18N("InboundPortConflictSuffix");
             return true;
         }
 
@@ -386,7 +386,7 @@ namespace v2rayN.Handler
                 System.Threading.Thread.Sleep(retryIntervalMs);
             }
 
-            message = "本地端口释放超时，请检查是否有其他程序占用端口。";
+            message = UIRes.I18N("PortReleaseTimeout");
             return true;
         }
 
@@ -399,7 +399,7 @@ namespace v2rayN.Handler
 
         private string FormatPortOwner(string protocol, IPAddress address, int port, uint processId)
         {
-            string processName = "未知";
+            string processName = UIRes.I18N("Unknown");
             try
             {
                 using (Process owner = Process.GetProcessById((int)processId))
@@ -410,7 +410,7 @@ namespace v2rayN.Handler
                 // 进程可能在枚举端口后立即退出，保留 PID 供用户排查。
             }
 
-            return String.Format("{0} {1}:{2}，PID={3}，进程={4}",
+            return String.Format(UIRes.I18N("PortOwnerDetails"),
                 protocol, address, port, processId, processName);
         }
 
@@ -555,7 +555,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog("Unable to allocate speed-test ports: " + ex.Message, ex);
-                ShowMsg(false, "无法分配测速端口: " + ex.Message);
+                ShowMsg(false, UIRes.I18N("SpeedtestPortAllocateFailed") + ": " + ex.Message);
                 return -1;
             }
         }
@@ -594,7 +594,7 @@ namespace v2rayN.Handler
                     // Never forget a process that is still alive: the next start
                     // must not race its UDP/TCP listeners being released.
                     if (!oldProcess.HasExited)
-                        throw new InvalidOperationException("旧内核进程仍在退出，已取消本次启动。PID=" + oldProcess.Id);
+                        throw new InvalidOperationException(UIRes.I18N("OldCoreStillExitingWithPid") + oldProcess.Id);
 
                     oldProcess.Dispose();
                     _process = null;
@@ -745,8 +745,8 @@ namespace v2rayN.Handler
                 {
                     startupElapsedMs = startupWatch.ElapsedMilliseconds;
                     failure = ports == null || ports.Count == 0
-                        ? "内核进程启动后未能保持运行。"
-                        : "内核进程在 10 秒内未能建立可用的 SOCKS 入站端口。";
+                        ? UIRes.I18N("CoreExitedAfterStart")
+                        : UIRes.I18N("CoreSocksNotReady");
 
                     // Do not try the legacy command line until this process is
                     // confirmed stopped; otherwise both attempts may compete for ports.
@@ -756,14 +756,14 @@ namespace v2rayN.Handler
                         if (!p.WaitForExit(5000))
                         {
                             canFallback = false;
-                            failure += Environment.NewLine + "启动失败的内核进程在结束请求后仍未退出，已禁止尝试第二种启动参数。PID="
+                            failure += Environment.NewLine + UIRes.I18N("FailedCoreStillRunningNoFallback")
                                 + p.Id;
                         }
                     }
                     catch (Exception stopEx)
                     {
                         canFallback = false;
-                        failure += Environment.NewLine + "无法确认失败的内核进程已退出，已禁止尝试第二种启动参数: "
+                        failure += Environment.NewLine + UIRes.I18N("CannotConfirmFailedCoreExitedNoFallback")
                             + stopEx.Message;
                     }
                     try { p.Dispose(); } catch { }
@@ -774,7 +774,7 @@ namespace v2rayN.Handler
                 startupElapsedMs = startupWatch.ElapsedMilliseconds;
                 lock (errorText) failure = errorText.ToString();
                 if (String.IsNullOrEmpty(failure))
-                    failure = "内核进程在启动检查期间退出，退出代码: " + p.ExitCode;
+                    failure = UIRes.I18N("CoreExitedDuringStartup") + p.ExitCode;
                 p.Dispose();
                 return null;
             }
@@ -792,7 +792,7 @@ namespace v2rayN.Handler
                             if (!p.WaitForExit(5000))
                             {
                                 canFallback = false;
-                                failure += Environment.NewLine + "启动异常后的内核进程仍未退出，已禁止尝试第二种启动参数。PID="
+                                failure += Environment.NewLine + UIRes.I18N("StartupExceptionProcessStillRunning")
                                     + p.Id;
                             }
                         }
@@ -800,7 +800,7 @@ namespace v2rayN.Handler
                     catch (Exception stopEx)
                     {
                         canFallback = false;
-                        failure += Environment.NewLine + "无法确认启动异常进程已退出: " + stopEx.Message;
+                        failure += Environment.NewLine + UIRes.I18N("CannotConfirmStartupExceptionExited") + stopEx.Message;
                     }
                 }
                 try { p.Dispose(); } catch { }
@@ -964,7 +964,7 @@ namespace v2rayN.Handler
             {
                 totalWatch.Stop();
                 startupElapsedMs = totalWatch.ElapsedMilliseconds;
-                failure = "内核新参数启动失败，且无法确认失败进程已退出；为避免端口冲突，已取消兼容参数重试。"
+                failure = UIRes.I18N("NewCoreStartupFailedNoFallback")
                     + Environment.NewLine + error5;
                 return null;
             }
@@ -992,7 +992,7 @@ namespace v2rayN.Handler
                 return p;
             }
 
-            failure = "内核启动失败：新旧两种命令行参数均未能启动核心。"
+            failure = UIRes.I18N("CoreStartupFailedBothArgs")
                 + Environment.NewLine + "[新参数 -c]" + Environment.NewLine + error5
                 + Environment.NewLine + "[兼容参数 -config]" + Environment.NewLine + error4;
             return null;
@@ -1050,7 +1050,7 @@ namespace v2rayN.Handler
                 p = StartCoreWithFallback(fileName, tempConfigFile, ports, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
-                    throw new Exception("真连接测速内核启动失败。" + failure);
+                    throw new Exception(UIRes.I18N("SpeedtestCoreStartFailed") + failure);
 
                 // The core has loaded its configuration; the temporary file is no longer needed.
                 try { File.Delete(tempConfigFile); } catch { }

@@ -114,9 +114,9 @@ namespace v2rayN.Handler
                         ((WebClientEx)sender).Dispose();
                         downloadStopwatch.Stop();
                         if (cancellationIsFailure)
-                            UpdateCompleted(this, new ResultEventArgs(false, "下载超时或已取消"));
+                            UpdateCompleted(this, new ResultEventArgs(false, UIRes.I18N("DownloadTimeoutCancelled")));
                         else if (bytesReceived <= 0)
-                            UpdateCompleted(this, new ResultEventArgs(false, "测速失败：未收到数据"));
+                            UpdateCompleted(this, new ResultEventArgs(false, UIRes.I18N("SpeedtestNoData")));
                         else
                             UpdateCompleted(this, new ResultEventArgs(true, GetDownloadSpeed()));
                         return;
@@ -160,7 +160,7 @@ namespace v2rayN.Handler
         {
             double elapsedSeconds = downloadStopwatch.Elapsed.TotalSeconds;
             if (bytesReceived <= 0 || elapsedSeconds <= 0)
-                return "测速失败：未收到有效数据";
+                return UIRes.I18N("SpeedtestNoValidData");
 
             // Use decimal MB (1 MB = 1,000,000 bytes). Avoid rounding a
             // slow but non-zero connection to the misleading value "0.0 MB/s".
@@ -168,7 +168,7 @@ namespace v2rayN.Handler
             if (double.IsNaN(speedBytesPerSecond)
                 || double.IsInfinity(speedBytesPerSecond)
                 || speedBytesPerSecond <= 0)
-                return "测速失败：速度计算异常";
+                return UIRes.I18N("SpeedtestCalculationError");
 
             if (speedBytesPerSecond < 1000)
                 return string.Format("{0} B/s", speedBytesPerSecond.ToString("0"));

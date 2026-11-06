@@ -98,7 +98,7 @@ namespace v2rayN.Handler
                     corePath = alternate;
             }
             if (!System.IO.File.Exists(corePath))
-                throw new Exception("未找到核心程序: " + coreName);
+                throw new Exception(UIRes.I18N("CoreNotFound") + coreName);
 
             ProcessStartInfo info = new ProcessStartInfo();
             info.FileName = corePath;
@@ -136,7 +136,7 @@ namespace v2rayN.Handler
                 if (!process.WaitForExit(5000))
                 {
                     try { process.Kill(); } catch { }
-                    throw new TimeoutException("查询 V2Ray 统计 API 超时");
+                    throw new TimeoutException(UIRes.I18N("StatisticsApiTimeout"));
                 }
                 process.WaitForExit();
             }
@@ -146,12 +146,12 @@ namespace v2rayN.Handler
             lock (output) json = output.ToString().Trim();
             lock (error) errorText = error.ToString().Trim();
             if (json.Length == 0)
-                throw new Exception(errorText.Length == 0 ? "统计 API 未返回数据" : errorText);
+                throw new Exception(errorText.Length == 0 ? UIRes.I18N("StatisticsApiNoData") : errorText);
 
             JObject result = JObject.Parse(json);
             JArray values = result["stat"] as JArray;
             if (values == null)
-                throw new Exception("统计 API 返回格式不正确");
+                throw new Exception(UIRes.I18N("StatisticsApiInvalidFormat"));
 
             ulong currentUp = 0;
             ulong currentDown = 0;

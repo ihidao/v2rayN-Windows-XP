@@ -46,7 +46,7 @@ namespace v2rayN
             }
             else
             {
-                UI.ShowWarning($"v2rayN is already running(v2rayN已经运行)");
+                UI.ShowWarning(UIRes.I18N("AlreadyRunning"));
             }
         }
 

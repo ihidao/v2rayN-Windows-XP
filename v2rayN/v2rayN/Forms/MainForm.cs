@@ -1337,13 +1337,19 @@ namespace v2rayN.Forms
                 || lower.IndexOf("异常", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("未能", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("failed", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("exception", StringComparison.Ordinal) >= 0)
+                || lower.IndexOf("exception", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("unable", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("cannot", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("timed out", StringComparison.Ordinal) >= 0)
                 level = "Error";
             else if (lower.IndexOf("[warning]", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("[warn]", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("警告", StringComparison.Ordinal) >= 0
                 || lower.IndexOf("核心未就绪", StringComparison.Ordinal) >= 0
-                || lower.IndexOf("已退出", StringComparison.Ordinal) >= 0)
+                || lower.IndexOf("已退出", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("not ready", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("still running", StringComparison.Ordinal) >= 0
+                || lower.IndexOf("exited", StringComparison.Ordinal) >= 0)
                 level = "Warning";
 
             // 已有等级时只补时间戳，避免重复添加 [Error]/[Warning]。

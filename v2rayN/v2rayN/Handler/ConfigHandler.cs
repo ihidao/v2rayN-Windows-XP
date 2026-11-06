@@ -1172,7 +1172,7 @@ namespace v2rayN.Handler
             {
                 //Global
                 var item1 = new RoutingItem();
-                item1.remarks = "全局(Global)";
+                item1.remarks = UIRes.I18N("DefaultGlobal");
                 item1.url = string.Empty;
                 item1.rules = new List<RulesItem>();
                 string result1 = Utils.GetEmbedText(Global.CustomRoutingFileName + "global");
@@ -1181,7 +1181,7 @@ namespace v2rayN.Handler
 
                 //Bypass the mainland
                 var item2 = new RoutingItem();
-                item2.remarks = "绕过大陆(Whitelist)";
+                item2.remarks = UIRes.I18N("DefaultBypass");
                 item2.url = string.Empty;
                 item2.rules = new List<RulesItem>();
                 string result2 = Utils.GetEmbedText(Global.CustomRoutingFileName + "white");
