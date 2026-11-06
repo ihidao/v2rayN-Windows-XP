@@ -24,8 +24,11 @@ namespace v2rayN.Handler
             {
                 if (_logFunc != null)
                 {
-                    string logLine = string.Format("[{0}] [{1}] [Speedtest] {2}",
-                        DateTime.Now.ToString("HH:mm:ss"), level, message);
+                    string normalizedLevel = level.Equals("ERROR", StringComparison.OrdinalIgnoreCase)
+                        ? "Error" : level.Equals("WARNING", StringComparison.OrdinalIgnoreCase)
+                            ? "Warning" : "Info";
+                    string logLine = string.Format("{0} [{1}] [Speedtest] {2}",
+                        DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"), normalizedLevel, message);
                     _logFunc(logLine + Environment.NewLine);
                 }
             }
@@ -115,8 +118,6 @@ namespace v2rayN.Handler
             Stopwatch totalWatch = Stopwatch.StartNew();
             try
             {
-                LogProgress(String.Format(UIRes.I18N("SpeedtestGeneratingConfigFormat"), _selecteds.Count));
-
                 Dictionary<int, int> speedTestPorts;
                 LogProgress(UIRes.I18N("SpeedtestStartingCore"));
                 pid = _v2rayHandler.LoadV2rayConfigString(_config, _selecteds, out speedTestPorts);
@@ -171,7 +172,6 @@ namespace v2rayN.Handler
                         }
                     }));
                 }
-                LogProgress(String.Format(UIRes.I18N("SpeedtestRequestSentFormat"), tasks.Count));
                 Task.WaitAll(tasks.ToArray());
             }
             catch (Exception ex)
@@ -183,7 +183,6 @@ namespace v2rayN.Handler
             {
                 if (pid > 0)
                 {
-                    LogProgress(UIRes.I18N("SpeedtestStoppingCore") + pid);
                     _v2rayHandler.V2rayStopPid(pid);
                 }
                 totalWatch.Stop();
