@@ -1321,6 +1321,14 @@ namespace v2rayN.Forms
             if (Regex.IsMatch(line, @"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}"))
                 return line;
 
+            // Keep v2rayN service-start/status messages in the original GUI style:
+            // timestamp + message, without adding an artificial [INFO] level.
+            string startServicePrefix = UIRes.I18N("StartService").Split('{')[0];
+            if ((!String.IsNullOrEmpty(startServicePrefix)
+                    && line.StartsWith(startServicePrefix, StringComparison.OrdinalIgnoreCase))
+                || line.IndexOf(" started successfully (PID=", StringComparison.OrdinalIgnoreCase) >= 0)
+                return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " " + line;
+
             // 真连接测速模块已有自己的时分秒与等级格式。
             if (Regex.IsMatch(line, @"^\[\d{2}:\d{2}:\d{2}\] \[(INFO|WARNING|ERROR)\]",
                 RegexOptions.IgnoreCase))
