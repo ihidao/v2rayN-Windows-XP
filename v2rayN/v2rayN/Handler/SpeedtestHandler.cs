@@ -110,7 +110,7 @@ namespace v2rayN.Handler
                         continue;
                     }
 
-                    tasks.Add(Task.Run(() =>
+                    tasks.Add(Task.Factory.StartNew(() =>
                     {
                         try
                         {
