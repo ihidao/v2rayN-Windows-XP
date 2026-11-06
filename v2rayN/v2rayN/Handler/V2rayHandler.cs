@@ -530,17 +530,17 @@ namespace v2rayN.Handler
         // Wait for the core's own startup message, then briefly verify the SOCKS listener.
         // Both output streams are consumed asynchronously to avoid pipe deadlocks.
         private Process TryStartCore(string fileName, string arguments, List<int> ports,
-            out string failure, out long startupElapsedMs, out string coreNameVersion)
+            out string failure, out long startupElapsedMs, out string coreNameVersion,
+            out bool canFallback)
         {
             failure = string.Empty;
             startupElapsedMs = 0;
             coreNameVersion = "V2Ray";
+            canFallback = true;
             string detectedCoreNameVersion = "V2Ray";
             Stopwatch startupWatch = new Stopwatch();
             Process p = new Process();
             StringBuilder errorText = new StringBuilder();
-            object startupLock = new object();
-            bool startedMessageSeen = false;
             p.StartInfo = new ProcessStartInfo
             {
                 FileName = fileName,
@@ -560,21 +560,15 @@ namespace v2rayN.Handler
                 if (banner.StartsWith("V2Ray ", StringComparison.OrdinalIgnoreCase)
                     || banner.StartsWith("Xray ", StringComparison.OrdinalIgnoreCase))
                 {
-                    string[] parts = banner.Split(new char[] { ' ', '\t' },
+                    string[] parts = banner.Split(new char[] { ' ', '\\t' },
                         StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2)
                         detectedCoreNameVersion = parts[0] + " " + parts[1];
                 }
-                // Keep warning/error details in the daily log file; do not forward
-                // routine connection chatter to the GUI log window.
                 if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
                 {
                     Utils.SaveLogDetail("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
-                }
-                if (IsCoreStartedMessage(e.Data))
-                {
-                    lock (startupLock) startedMessageSeen = true;
                 }
             };
             DataReceivedEventHandler errorHandler = (sender, e) =>
@@ -583,14 +577,8 @@ namespace v2rayN.Handler
                 lock (errorText) errorText.AppendLine(e.Data);
                 if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
                 {
-                    // Preserve full core diagnostics in guiLogs even when the GUI
-                    // displays only the concise warning/error line.
                     Utils.SaveLogDetail("CORE", e.Data);
                     ShowMsg(false, e.Data + Environment.NewLine);
-                }
-                if (IsCoreStartedMessage(e.Data))
-                {
-                    lock (startupLock) startedMessageSeen = true;
                 }
             };
             p.OutputDataReceived += outputHandler;
@@ -608,44 +596,31 @@ namespace v2rayN.Handler
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
-                // XP hardware may be slow. Allow up to 10 seconds for the core's
-                // explicit startup message; an early process exit fails immediately.
-                bool started = false;
-                for (int elapsed = 0; elapsed < 10000; elapsed += 100)
+                // Readiness is determined by the configured SOCKS listener, not by
+                // an INFO-level "started" message which may be suppressed by loglevel.
+                if (ports == null || ports.Count == 0)
                 {
-                    if (p.HasExited) break;
-
-                    lock (startupLock) started = startedMessageSeen;
-                    if (started) break;
-
-                    if (p.WaitForExit(100)) break;
-                }
-
-                if (!p.HasExited && started)
-                {
-                    // The startup message is the primary signal. Verify the configured
-                    // SOCKS listener for up to 2 more seconds before enabling the proxy.
-                    if (ports == null || ports.Count == 0)
+                    // There is no SOCKS listener to probe. Give the process a brief
+                    // startup grace period, then accept it only if it remains alive.
+                    if (!p.WaitForExit(500) && !p.HasExited)
                     {
                         startupElapsedMs = startupWatch.ElapsedMilliseconds;
                         coreNameVersion = detectedCoreNameVersion;
                         return p;
                     }
-
-                    // Poll at 50 ms intervals so the UI can proceed promptly once
-                    // the SOCKS listener is available, without adding a fixed startup delay.
-                    for (int elapsed = 0; elapsed < 2000; elapsed += 50)
+                }
+                else
+                {
+                    // Poll the SOCKS listener from the beginning. This works with
+                    // debug/info/warning/error/none because it does not depend on logs.
+                    for (int elapsed = 0; elapsed < 10000; elapsed += 50)
                     {
                         if (p.HasExited) break;
-                        if (IsAnyPortReady(ports))
+                        if (IsAnyPortReady(ports) && !p.HasExited)
                         {
-                            if (!p.WaitForExit(50))
-                            {
-                                startupElapsedMs = startupWatch.ElapsedMilliseconds;
-                                coreNameVersion = detectedCoreNameVersion;
-                                return p;
-                            }
-                            break;
+                            startupElapsedMs = startupWatch.ElapsedMilliseconds;
+                            coreNameVersion = detectedCoreNameVersion;
+                            return p;
                         }
                         if (p.WaitForExit(50)) break;
                     }
@@ -653,17 +628,29 @@ namespace v2rayN.Handler
 
                 if (!p.HasExited)
                 {
-                    lock (startupLock) started = startedMessageSeen;
                     startupElapsedMs = startupWatch.ElapsedMilliseconds;
-                    failure = started
-                        ? "内核已输出启动成功提示，但 SOCKS 入站端口在 2 秒内未就绪。"
-                        : "内核进程仍在运行，但在 10 秒内未输出启动成功提示。";
+                    failure = ports == null || ports.Count == 0
+                        ? "内核进程启动后未能保持运行。"
+                        : "内核进程在 10 秒内未能建立可用的 SOCKS 入站端口。";
+
+                    // Do not try the legacy command line until this process is
+                    // confirmed stopped; otherwise both attempts may compete for ports.
                     try
                     {
                         p.Kill();
-                        p.WaitForExit(1000);
+                        if (!p.WaitForExit(5000))
+                        {
+                            canFallback = false;
+                            failure += Environment.NewLine + "启动失败的内核进程在结束请求后仍未退出，已禁止尝试第二种启动参数。PID="
+                                + p.Id;
+                        }
                     }
-                    catch { }
+                    catch (Exception stopEx)
+                    {
+                        canFallback = false;
+                        failure += Environment.NewLine + "无法确认失败的内核进程已退出，已禁止尝试第二种启动参数: "
+                            + stopEx.Message;
+                    }
                     try { p.Dispose(); } catch { }
                     return null;
                 }
@@ -680,6 +667,24 @@ namespace v2rayN.Handler
             {
                 lock (errorText) failure = errorText.ToString();
                 failure = ex.Message + (String.IsNullOrEmpty(failure) ? "" : Environment.NewLine + failure);
+                try
+                {
+                    if (!p.HasExited)
+                    {
+                        p.Kill();
+                        if (!p.WaitForExit(5000))
+                        {
+                            canFallback = false;
+                            failure += Environment.NewLine + "启动异常后的内核进程仍未退出，已禁止尝试第二种启动参数。PID="
+                                + p.Id;
+                        }
+                    }
+                }
+                catch (Exception stopEx)
+                {
+                    canFallback = false;
+                    failure += Environment.NewLine + "无法确认启动异常进程已退出: " + stopEx.Message;
+                }
                 try { p.Dispose(); } catch { }
                 return null;
             }
@@ -755,8 +760,9 @@ namespace v2rayN.Handler
             string error5;
             long attempt5Ms;
             string version5;
+            bool canTryLegacy;
             Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports,
-                out error5, out attempt5Ms, out version5);
+                out error5, out attempt5Ms, out version5, out canTryLegacy);
             if (p != null)
             {
                 totalWatch.Stop();
@@ -770,14 +776,24 @@ namespace v2rayN.Handler
                 return p;
             }
 
+            if (!canTryLegacy)
+            {
+                totalWatch.Stop();
+                startupElapsedMs = totalWatch.ElapsedMilliseconds;
+                failure = "内核新参数启动失败，且无法确认失败进程已退出；为避免端口冲突，已取消兼容参数重试。"
+                    + Environment.NewLine + error5;
+                return null;
+            }
+
             Utils.SaveLog("[CoreStartup] config-arg=-c failed after " + attempt5Ms
                 + " ms; trying config-arg=-config. " + error5);
 
             string error4;
             long attempt4Ms;
             string version4;
+            bool unusedCanFallback;
             p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports,
-                out error4, out attempt4Ms, out version4);
+                out error4, out attempt4Ms, out version4, out unusedCanFallback);
             totalWatch.Stop();
             startupElapsedMs = totalWatch.ElapsedMilliseconds;
             if (p != null)
