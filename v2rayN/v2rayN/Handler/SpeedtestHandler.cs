@@ -254,9 +254,7 @@ namespace v2rayN.Handler
             try
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                // XP machines and older networks may need more than the previous 5 seconds.
-                request.Timeout = 15000;
-                request.ReadWriteTimeout = 15000;
+                request.Timeout = 5000;
                 request.Proxy = webProxy;
                 request.KeepAlive = false;
 
