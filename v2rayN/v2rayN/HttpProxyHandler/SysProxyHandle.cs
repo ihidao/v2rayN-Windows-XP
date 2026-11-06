@@ -27,32 +27,42 @@ namespace v2rayN.HttpProxyHandler
         [DllImport("wininet.dll", SetLastError = true)]
         private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
 
-        private static void CaptureOriginalSettings()
+        /// <summary>
+        /// Capture the current user's proxy settings once, before v2rayN changes them.
+        /// </summary>
+        public static void CaptureOriginalSettings()
         {
             if (_settingsCaptured) return;
 
-            Dictionary<string, SavedValue> values = new Dictionary<string, SavedValue>();
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(InternetSettingsPath, false))
+            try
             {
-                if (key != null)
+                Dictionary<string, SavedValue> values = new Dictionary<string, SavedValue>();
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(InternetSettingsPath, false))
                 {
                     foreach (string name in ProxyValueNames)
                     {
                         SavedValue saved = new SavedValue();
-                        try
+                        if (key != null)
                         {
-                            saved.Value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-                            saved.Exists = saved.Value != null;
-                            if (saved.Exists)
-                                saved.Kind = key.GetValueKind(name);
+                            try
+                            {
+                                saved.Value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+                                saved.Exists = saved.Value != null;
+                                if (saved.Exists)
+                                    saved.Kind = key.GetValueKind(name);
+                            }
+                            catch { saved.Exists = false; }
                         }
-                        catch { saved.Exists = false; }
                         values[name] = saved;
                     }
                 }
+                _originalValues = values;
+                _settingsCaptured = true;
             }
-            _originalValues = values;
-            _settingsCaptured = true;
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Capture original system proxy failed: " + ex.Message, ex);
+            }
         }
 
         private static RegistryKey OpenSettingsKey()
@@ -152,15 +162,17 @@ namespace v2rayN.HttpProxyHandler
             }
         }
 
-        private static void RestoreOriginalSettings()
+        /// <summary>
+        /// Restore the proxy settings captured when v2rayN started.
+        /// Safe to call more than once during the application exit sequence.
+        /// </summary>
+        public static void RestoreOriginalSettings()
         {
             try
             {
+                // Do not clear the user's proxy when no startup snapshot was captured.
                 if (!_settingsCaptured || _originalValues == null)
-                {
-                    ResetIEProxy();
                     return;
-                }
 
                 using (RegistryKey key = OpenSettingsKey())
                 {
