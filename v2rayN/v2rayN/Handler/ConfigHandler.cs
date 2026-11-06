@@ -55,6 +55,16 @@ namespace v2rayN.Handler
                 };
             }
 
+            // Ensure the default system proxy bypass list is present in both new and existing configs.
+            if (Utils.IsNullOrEmpty(config.systemProxyExceptions))
+            {
+                config.systemProxyExceptions = Global.IEProxyExceptions;
+            }
+            if (!config.systemProxyExceptions.Split(';').Any(item => item.Trim().Equals("<local>", StringComparison.OrdinalIgnoreCase)))
+            {
+                config.systemProxyExceptions = config.systemProxyExceptions.TrimEnd(';') + ";<local>";
+            }
+
             //本地监听
             if (config.inbound == null)
             {
