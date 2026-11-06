@@ -156,8 +156,6 @@ namespace v2rayN.Forms
                 if (v2rayHandler != null)
                     v2rayHandler.V2rayStop();
 
-                // Restore the exact proxy state that was present when v2rayN started.
-                // This also covers Windows shutdown and is safe if exit is signaled twice.
                 //HttpProxyHandle.CloseHttpAgent(config);
                 if (blWindowsShutDown)
                 {
