@@ -164,6 +164,7 @@ namespace v2rayN.HttpProxyHandler
                     int port = Global.httpPort;
                     if (port <= 0)
                     {
+                        Utils.SaveLog("[SysProxy] Cannot enable system proxy: HTTP inbound port is invalid.");
                         return false;
                     }
 
