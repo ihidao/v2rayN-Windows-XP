@@ -318,7 +318,7 @@ namespace v2rayN.Handler
                         continue;
 
                     if (conflicts.Length > 0) conflicts.Append(" | ");
-                    conflicts.Append(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
+                    conflicts.Append(FormatPortOwner(port, row.owningPid));
                 }
 
                 // UDP 没有 LISTENING 状态，按实际绑定端口及 owning PID 判断。
@@ -333,7 +333,7 @@ namespace v2rayN.Handler
                         continue;
 
                     if (conflicts.Length > 0) conflicts.Append(" | ");
-                    conflicts.Append(FormatPortOwner("UDP", boundAddress, port, row.owningPid));
+                    conflicts.Append(FormatPortOwner(port, row.owningPid));
                 }
             }
             catch (Exception ex)
@@ -348,9 +348,7 @@ namespace v2rayN.Handler
             if (conflicts.Length == 0)
                 return false;
 
-            message = UIRes.I18N("InboundPortConflictPrefix")
-                + " " + conflicts.ToString() + " "
-                + UIRes.I18N("InboundPortConflictSuffix");
+            message = conflicts.ToString();
             return true;
         }
 
@@ -393,8 +391,7 @@ namespace v2rayN.Handler
 
             // Keep the last owner snapshot: otherwise the user only sees a generic
             // timeout and cannot identify which port and process blocked startup.
-            message = lastConflict + " "
-                + UIRes.I18N("PortReleaseTimeout");
+            message = lastConflict;
             return true;
         }
 
@@ -405,24 +402,27 @@ namespace v2rayN.Handler
                 || boundAddress.Equals(targetAddress);
         }
 
-        private string FormatPortOwner(string protocol, IPAddress address, int port, uint processId)
+        private string FormatPortOwner(int port, uint processId)
         {
             string processName = UIRes.I18N("Unknown");
             try
             {
                 using (Process owner = Process.GetProcessById((int)processId))
+                {
                     processName = owner.ProcessName;
+                    if (!processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(processName, "System", StringComparison.OrdinalIgnoreCase))
+                        processName += ".exe";
+                }
             }
             catch
             {
                 // 进程可能在枚举端口后立即退出，保留 PID 供用户排查。
             }
 
-            // Mark each owner row as Error so MainForm's configured log-level
-            // filter does not hide the port/PID/process details while retaining
-            // the timeout error itself.
+            // Keep the conflict visible under Warning/Error log filters.
             return "[Error] " + String.Format(UIRes.I18N("PortOwnerDetails"),
-                protocol, address, port, processId, processName);
+                port, processName, processId);
         }
 
         private int GetHostPort(uint networkPort)
@@ -1058,8 +1058,7 @@ namespace v2rayN.Handler
                 try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                 _process = p;
                 Global.processJob.AddProcess(p.Handle);
-                ShowMsg(false, coreNameVersion + " started successfully (PID=" + p.Id
-                    + ", SOCKS ready)." + Environment.NewLine);
+
             }
             catch (Exception ex)
             {
