@@ -87,6 +87,10 @@ namespace v2rayN
             { "SpeedtestUnexpectedError", new[] { "An error occurred during the speed test: ", "测速过程发生异常：" } },
             { "NewArgsLabel", new[] { "[New arguments -c]", "[新参数 -c]" } },
             { "LegacyArgsLabel", new[] { "[Legacy arguments -config]", "[兼容参数 -config]" } },
+            { "SpeedtestFailurePrefix", new[] { "Speed test failed", "测速失败" } },
+            { "DownloadTimeoutPrefix", new[] { "Download timed out", "下载超时" } },
+            { "GeoProxyDownloadFailedRetryDirect", new[] { "Geo file download through the local proxy failed. Retrying with a direct connection...", "通过本地代理下载 Geo 文件失败，正在尝试直连..." } },
+            { "GeoDownloadFailedAllMethods", new[] { "Geo file download failed using both the proxy and direct connection: ", "Geo 文件下载失败（代理和直连均未成功）：" } },
             { "AlreadyRunning", new[] { "v2rayN is already running", "v2rayN已经运行" } },
             { "DefaultGlobal", new[] { "Global (Global)", "全局(Global)" } },
             { "DefaultBypass", new[] { "Bypass Mainland (Whitelist)", "绕过大陆(Whitelist)" } }

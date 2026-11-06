@@ -316,8 +316,8 @@ namespace v2rayN.Handler
                     }
                 }
                 else if (!string.IsNullOrEmpty(args.Msg)
-                    && (args.Msg.StartsWith("测速失败", StringComparison.Ordinal)
-                        || args.Msg.StartsWith("下载超时", StringComparison.Ordinal)))
+                    && (args.Msg.StartsWith(UIRes.I18N("SpeedtestFailurePrefix"), StringComparison.Ordinal)
+                        || args.Msg.StartsWith(UIRes.I18N("DownloadTimeoutPrefix"), StringComparison.Ordinal)))
                 {
                     HandleGeoFileDownloadFailure(geoName, url, proxy, directTempPath,
                         retryDirect, new IOException(args.Msg));
@@ -349,7 +349,7 @@ namespace v2rayN.Handler
 
             if (retryDirect)
             {
-                _updateFunc(false, "通过本地代理下载 Geo 文件失败，正在尝试直连...");
+                _updateFunc(false, UIRes.I18N("GeoProxyDownloadFailedRetryDirect"));
                 try
                 {
                     if (File.Exists(directTempPath))
@@ -363,7 +363,7 @@ namespace v2rayN.Handler
             }
             else
             {
-                _updateFunc(false, "Geo 文件下载失败（代理和直连均未成功）：" + error.Message);
+                _updateFunc(false, UIRes.I18N("GeoDownloadFailedAllMethods") + error.Message);
             }
         }
 
