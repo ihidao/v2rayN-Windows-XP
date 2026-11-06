@@ -10,6 +10,9 @@ namespace v2rayN
 {
     static class Program
     {
+        // Set when the user changes the UI language; handled after orderly shutdown.
+        public static bool RestartForLanguageChange;
+
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetProcessDPIAware();
 
@@ -44,6 +47,22 @@ namespace v2rayN
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new MainForm());
+
+                // Restart only after the old message loop and shutdown cleanup have completed.
+                if (RestartForLanguageChange)
+                {
+                    try
+                    {
+                        Global.mutexObj?.Dispose();
+                        Global.mutexObj = null;
+                        Process.Start(Application.ExecutablePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Utils.SaveLog("Unable to restart v2rayN after language change: " + ex.Message, ex);
+                        UI.ShowWarning("Unable to restart v2rayN. Please start it manually.");
+                    }
+                }
             }
             else
             {
