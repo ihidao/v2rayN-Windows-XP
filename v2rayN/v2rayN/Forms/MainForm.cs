@@ -1879,7 +1879,8 @@ namespace v2rayN.Forms
         private void SetCurrentLanguage(string value)
         {
             Utils.RegWriteValue(Global.MyRegPath, Global.MyRegKeyLanguage, value);
-            Application.Restart();
+            Program.RestartForLanguageChange = true;
+            Application.Exit();
         }
 
 
