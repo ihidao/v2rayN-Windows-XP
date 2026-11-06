@@ -21,6 +21,8 @@ namespace v2rayN.Handler
         private Process _process;
         private List<int> readinessPorts = new List<int>();
         private List<int> readinessUdpPorts = new List<int>();
+        private bool saveCoreLogs;
+        private readonly object coreLogLock = new object();
 
         /// <summary>
         /// True only while the process launched by this handler is still alive.
@@ -47,6 +49,7 @@ namespace v2rayN.Handler
 
         public void LoadV2ray(Config config, bool reloadConfig)
         {
+            saveCoreLogs = config != null && config.logEnabled;
             readinessPorts = new List<int>();
             readinessUdpPorts = new List<int>();
             if (config.inbound != null)
@@ -650,7 +653,7 @@ namespace v2rayN.Handler
         // Wait for the core's own startup message, then briefly verify the SOCKS listener.
         // Both output streams are consumed asynchronously to avoid pipe deadlocks.
         private Process TryStartCore(string fileName, string arguments, List<int> ports, bool checkUdp,
-            out string failure, out long startupElapsedMs, out string coreNameVersion,
+            bool saveLogs, out string failure, out long startupElapsedMs, out string coreNameVersion,
             out bool canFallback)
         {
             failure = string.Empty;
@@ -691,6 +694,8 @@ namespace v2rayN.Handler
                 // Core file logging remains controlled independently by logEnabled.
                 if (IsImportantCoreDiagnostic(e.Data))
                     Utils.SaveLogDetail("CORE", e.Data);
+                if (saveLogs)
+                    AppendCoreLog("Vaccess.log", e.Data);
                 ShowMsg(false, e.Data + Environment.NewLine);
             };
             DataReceivedEventHandler errorHandler = (sender, e) =>
@@ -700,6 +705,8 @@ namespace v2rayN.Handler
                 // Keep stderr diagnostics visible through the same GUI filtering path.
                 if (IsImportantCoreDiagnostic(e.Data))
                     Utils.SaveLogDetail("CORE", e.Data);
+                if (saveLogs)
+                    AppendCoreLog("Verror.log", e.Data);
                 ShowMsg(false, e.Data + Environment.NewLine);
             };
             p.OutputDataReceived += outputHandler;
@@ -812,6 +819,27 @@ namespace v2rayN.Handler
                 }
                 try { p.Dispose(); } catch { }
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Save the same core output that is forwarded to the GUI. Keeping this
+        /// separate from the core's own file logging ensures logging is always
+        /// visible in the main window, regardless of the save-log checkbox.
+        /// </summary>
+        private void AppendCoreLog(string fileName, string line)
+        {
+            try
+            {
+                string path = Utils.GetPath(fileName);
+                lock (coreLogLock)
+                {
+                    File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[CoreLog] Unable to save " + fileName + ": " + ex.Message, ex);
             }
         }
 
@@ -943,7 +971,7 @@ namespace v2rayN.Handler
         }
 
         private Process StartCoreWithFallback(string fileName, string configFile, List<int> ports, bool checkUdp,
-            out string failure, out long startupElapsedMs, out bool usedLegacyArguments,
+            bool saveLogs, out string failure, out long startupElapsedMs, out bool usedLegacyArguments,
             out string coreNameVersion)
         {
             Stopwatch totalWatch = Stopwatch.StartNew();
@@ -955,7 +983,7 @@ namespace v2rayN.Handler
             long attempt5Ms;
             string version5;
             bool canTryLegacy;
-            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports, checkUdp,
+            Process p = TryStartCore(fileName, "run -c \"" + configFile + "\"", ports, checkUdp, saveLogs,
                 out error5, out attempt5Ms, out version5, out canTryLegacy);
             if (p != null)
             {
@@ -986,7 +1014,7 @@ namespace v2rayN.Handler
             long attempt4Ms;
             string version4;
             bool unusedCanFallback;
-            p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports, checkUdp,
+            p = TryStartCore(fileName, "-config \"" + configFile + "\"", ports, checkUdp, saveLogs,
                 out error4, out attempt4Ms, out version4, out unusedCanFallback);
             totalWatch.Stop();
             startupElapsedMs = totalWatch.ElapsedMilliseconds;
@@ -1021,7 +1049,7 @@ namespace v2rayN.Handler
                 bool usedLegacyArguments;
                 string coreNameVersion;
                 Process p = StartCoreWithFallback(fileName,
-                    Utils.GetPath(v2rayConfigRes), readinessPorts, true, out failure,
+                    Utils.GetPath(v2rayConfigRes), readinessPorts, true, saveCoreLogs, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
                     throw new Exception(failure);
@@ -1057,7 +1085,7 @@ namespace v2rayN.Handler
                 long startupElapsedMs;
                 bool usedLegacyArguments;
                 string coreNameVersion;
-                p = StartCoreWithFallback(fileName, tempConfigFile, ports, false, out failure,
+                p = StartCoreWithFallback(fileName, tempConfigFile, ports, false, false, out failure,
                     out startupElapsedMs, out usedLegacyArguments, out coreNameVersion);
                 if (p == null)
                     throw new Exception(UIRes.I18N("SpeedtestCoreStartFailed") + failure);
