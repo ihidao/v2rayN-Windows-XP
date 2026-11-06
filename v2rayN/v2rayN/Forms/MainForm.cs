@@ -955,7 +955,7 @@ namespace v2rayN.Forms
             if (GetLvSelectedIndex() < 0) return;
             ClearTestResult();
             SpeedtestHandler statistics = new SpeedtestHandler(ref config, ref v2rayHandler, lvSelecteds, actionType,
-                UpdateSpeedtestHandler, message => AppendText(false, message));
+                UpdateSpeedtestHandler);
         }
 
         private void tsbTestMe_Click(object sender, EventArgs e)
