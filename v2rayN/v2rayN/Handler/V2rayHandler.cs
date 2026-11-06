@@ -356,7 +356,7 @@ namespace v2rayN.Handler
         /// </summary>
         private bool WaitForInboundPortsRelease(Config config, out string message)
         {
-            const int timeoutMs = 3000;
+            const int timeoutMs = 1000;
             const int retryIntervalMs = 100;
             Stopwatch waitWatch = Stopwatch.StartNew();
             string lastConflict = String.Empty;
@@ -386,8 +386,7 @@ namespace v2rayN.Handler
                 System.Threading.Thread.Sleep(retryIntervalMs);
             }
 
-            message = "等待内核端口释放超时（" + timeoutMs + " ms），检测到端口仍被占用："
-                + Environment.NewLine + lastConflict;
+            message = "本地端口释放超时，请检查是否有其他程序占用端口。";
             return true;
         }
 
