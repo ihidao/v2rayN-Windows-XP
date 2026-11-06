@@ -36,7 +36,7 @@ namespace v2rayN.Forms
 
             // Show a usable tray icon immediately; do not wait for the core to become ready.
             notifyMain.Icon = this.Icon ?? SystemIcons.Application;
-            notifyMain.Text = "v2rayN 正在启动";
+            notifyMain.Text = UIRes.I18N("AppStarting");
             this.ShowInTaskbar = false;
             this.WindowState = FormWindowState.Minimized;
             HideForm();
@@ -460,7 +460,7 @@ namespace v2rayN.Forms
             if (startupConfig == null)
             {
                 Utils.SaveLog("Initial core startup cancelled: config snapshot could not be created.");
-                AppendText(false, "启动配置快照创建失败，已取消后台启动。");
+                AppendText(false, UIRes.I18N("StartupSnapshotFailed"));
                 coreRestartInProgress = false;
                 tsbReload.Enabled = true;
                 return;
@@ -534,7 +534,7 @@ namespace v2rayN.Forms
                                 }
                                 else if (!coreReady)
                                 {
-                                    AppendText(false, "核心未就绪，暂不启用系统代理和流量统计。");
+                                    AppendText(false, UIRes.I18N("CoreNotReadyProxyStatsDisabled"));
                                 }
 
                                 tsbReload.Enabled = true;
@@ -608,7 +608,7 @@ namespace v2rayN.Forms
             {
                 coreRestartInProgress = false;
                 tsbReload.Enabled = true;
-                AppendText(false, "重启配置快照创建失败，已取消内核重启。");
+                AppendText(false, UIRes.I18N("RestartSnapshotFailed"));
                 return;
             }
 
@@ -653,7 +653,7 @@ namespace v2rayN.Forms
                 catch (Exception ex)
                 {
                     Utils.SaveLog("Core restart failed: " + ex.Message, ex);
-                    AppendText(false, "内核重启失败: " + ex.Message);
+                    AppendText(false, UIRes.I18N("CoreRestartFailed") + ex.Message);
                 }
                 finally
                 {
@@ -706,7 +706,7 @@ namespace v2rayN.Forms
                                     else
                                     {
                                         statistics = null;
-                                        AppendText(false, "核心未就绪，未更新系统代理和流量统计。");
+                                        AppendText(false, UIRes.I18N("CoreNotReadyProxyStatsNotUpdated"));
                                     }
 
                                     tsbReload.Enabled = true;

@@ -993,8 +993,8 @@ namespace v2rayN.Handler
             }
 
             failure = UIRes.I18N("CoreStartupFailedBothArgs")
-                + Environment.NewLine + "[新参数 -c]" + Environment.NewLine + error5
-                + Environment.NewLine + "[兼容参数 -config]" + Environment.NewLine + error4;
+                + Environment.NewLine + UIRes.I18N("NewArgsLabel") + Environment.NewLine + error5
+                + Environment.NewLine + UIRes.I18N("LegacyArgsLabel") + Environment.NewLine + error4;
             return null;
         }
 

@@ -10,9 +10,16 @@ namespace v2rayN
     {
         static ResourceManager res = new ResourceManager("v2rayN.Resx.ResUI", Assembly.GetExecutingAssembly());
 
+        private static CultureInfo uiCulture = new CultureInfo("zh-Hans");
+
+        public static void SetCulture(string cultureName)
+        {
+            uiCulture = new CultureInfo(cultureName);
+        }
+
         static string LoadString(ResourceManager resMgr, string key)
         {
-            string value = resMgr.GetString(key);
+            string value = resMgr.GetString(key, uiCulture);
             if (value == null)
             {
                 throw new KeyNotFoundException($"key: {key}");
@@ -59,7 +66,7 @@ namespace v2rayN
             { "SpeedtestNoData", new[] { "Speed test failed: no data received", "测速失败：未收到数据" } },
             { "SpeedtestNoValidData", new[] { "Speed test failed: no valid data received", "测速失败：未收到有效数据" } },
             { "SpeedtestCalculationError", new[] { "Speed test failed: error while calculating the speed", "测速失败：速度计算异常" } },
-            { "SpeedtestGeneratingConfigFormat", new[] { "Generating speed-test configuration for ", "正在生成测速配置，共选择 " } },
+            { "SpeedtestGeneratingConfigFormat", new[] { "Generating speed-test configuration for {0} selected nodes.", "正在生成测速配置，共选择 {0} 个节点。" } },
             { "SpeedtestStartingCore", new[] { "Starting temporary speed-test core...", "正在启动临时测速内核……" } },
             { "SpeedtestCoreStartFailedLog", new[] { "Failed to start speed-test core: ", "测速内核启动失败：" } },
             { "SpeedtestCoreStarted", new[] { "Speed-test core started successfully. PID=", "测速内核启动成功，PID=" } },
@@ -67,22 +74,19 @@ namespace v2rayN
             { "SpeedtestTestingNode", new[] { "Testing node: ", "开始测试节点：" } },
             { "SpeedtestPortAllocationFailed", new[] { "Speed-test port allocation failed", "测速端口分配失败" } },
             { "SpeedtestNodeFailed", new[] { "Node test failed: ", "节点 " } },
-            { "SpeedtestElapsedSuffix", new[] { "Elapsed: ", "，耗时 " } },
-            { "SpeedtestFailureReasonSuffix", new[] { "Failure reason: ", "，失败原因：" } },
+            { "SpeedtestElapsedSuffix", new[] { ", elapsed {0} ms.", "，耗时 {0} ms。" } },
+            { "SpeedtestFailureReasonSuffix", new[] { ", failure reason: {0}.", "，失败原因：{0}。" } },
             { "SpeedtestError", new[] { "Speed-test error: ", "测速异常：" } },
-            { "SpeedtestRequestSentFormat", new[] { "Speed-test requests sent. Waiting for ", "测速请求已发出，等待 " } },
+            { "SpeedtestRequestSentFormat", new[] { "Speed-test requests sent. Waiting for {0} node(s) to respond.", "测速请求已发出，等待 {0} 个节点返回结果。" } },
             { "SpeedtestStoppingCore", new[] { "Stopping temporary speed-test core. PID=", "正在停止临时测速内核，PID=" } },
-            { "SpeedtestCompletedFormat", new[] { "Real-connection speed test completed. Total time: ", "本次真连接测速结束，总耗时 " } },
-            { "SpeedtestGeneratingConfig", new[] { "Generating speed-test configuration for {0} selected nodes.", "正在生成测速配置，共选择 {0} 个节点。" } },
+            { "SpeedtestCompletedFormat", new[] { "Real-connection speed test completed. Total time: {0} ms.", "本次真连接测速结束，总耗时 {0} ms。" } },
             { "SpeedtestNodePortFailed", new[] { "Node {0} test failed: speed-test port allocation failed.", "节点 {0} 测速失败：测速端口分配失败。" } },
             { "SpeedtestNodeTestResultPrefix", new[] { "Node {0} test result: ", "节点 {0} 测试结果：" } },
-            { "SpeedtestElapsed", new[] { ", elapsed {0} ms.", "，耗时 {0} ms。" } },
-            { "SpeedtestFailureReason", new[] { ", failure reason: {0}.", "，失败原因：{0}。" } },
             { "SpeedtestErrorShort", new[] { "Speed-test error", "测速异常" } },
             { "SpeedtestNodeError", new[] { "Node {0} test error: {1}", "节点 {0} 测速异常：{1}" } },
             { "SpeedtestUnexpectedError", new[] { "An error occurred during the speed test: ", "测速过程发生异常：" } },
-            { "SpeedtestRequestSent", new[] { "Speed-test requests sent. Waiting for {0} node(s) to respond.", "测速请求已发出，等待 {0} 个节点返回结果。" } },
-            { "SpeedtestCompleted", new[] { "Real-connection speed test completed. Total time: {0} ms.", "本次真连接测速结束，总耗时 {0} ms。" } }
+            { "NewArgsLabel", new[] { "[New arguments -c]", "[新参数 -c]" } },
+            { "LegacyArgsLabel", new[] { "[Legacy arguments -config]", "[兼容参数 -config]" } },
             { "AlreadyRunning", new[] { "v2rayN is already running", "v2rayN已经运行" } },
             { "DefaultGlobal", new[] { "Global (Global)", "全局(Global)" } },
             { "DefaultBypass", new[] { "Bypass Mainland (Whitelist)", "绕过大陆(Whitelist)" } }
@@ -93,7 +97,7 @@ namespace v2rayN
             string[] values;
             if (extraStrings.TryGetValue(key, out values))
             {
-                return Thread.CurrentThread.CurrentUICulture.TwoLetterISOLanguageName == "zh"
+                return uiCulture.TwoLetterISOLanguageName == "zh"
                     ? values[1] : values[0];
             }
             return LoadString(res, key);
