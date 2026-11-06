@@ -534,7 +534,7 @@ namespace v2rayN.Forms
                                 }
                                 else if (!coreReady)
                                 {
-                                    AppendText(false, UIRes.I18N("CoreNotReadyProxyStatsDisabled"));
+                                    // Keep the original proxy/statistics safety behavior silent.
                                 }
 
                                 tsbReload.Enabled = true;
@@ -706,7 +706,7 @@ namespace v2rayN.Forms
                                     else
                                     {
                                         statistics = null;
-                                        AppendText(false, UIRes.I18N("CoreNotReadyProxyStatsNotUpdated"));
+                                        // Keep the original proxy/statistics safety behavior silent.
                                     }
 
                                     tsbReload.Enabled = true;
