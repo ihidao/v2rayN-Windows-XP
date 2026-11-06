@@ -112,8 +112,9 @@ namespace v2rayN.HttpProxyHandler
                 // clear system setting
                 ExecSysproxy("set 1 - - -");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Utils.SaveLog("[SysProxy] ResetIEProxy failed: " + ex.Message, ex);
                 return false;
             }
 
