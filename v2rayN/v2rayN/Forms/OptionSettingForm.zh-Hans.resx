@@ -233,7 +233,7 @@
     <value>156, 16</value>
   </data>
   <data name="chklogEnabled.Text" xml:space="preserve">
-    <value>记录本地日志(默认关闭)</value>
+    <value>保存内核日志</value>
   </data>
   <data name="label5.Size" type="System.Drawing.Size, System.Drawing">
     <value>53, 12</value>
