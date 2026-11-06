@@ -29,6 +29,15 @@ namespace v2rayN.Mode
         }
 
         /// <summary>
+        /// Whether access log lines (accepted/rejected connections) are shown in the GUI.
+        /// Null preserves the historical behavior for existing configuration files.
+        /// </summary>
+        public bool? showAccessLogs
+        {
+            get; set;
+        }
+
+        /// <summary>
         /// 日志等级
         /// </summary>
         public string loglevel
