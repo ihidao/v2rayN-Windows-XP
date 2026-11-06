@@ -31,6 +31,7 @@ namespace v2rayN.Forms
         {
             //日志
             chklogEnabled.Checked = config.logEnabled;
+            chkShowAccessLogs.Checked = config.showAccessLogs != false;
             cmbloglevel.Text = config.loglevel;
 
             //Mux
@@ -160,6 +161,7 @@ namespace v2rayN.Forms
         {
             //日志
             bool logEnabled = chklogEnabled.Checked;
+            bool showAccessLogs = chkShowAccessLogs.Checked;
             string loglevel = cmbloglevel.Text.TrimEx();
 
             //Mux
@@ -221,6 +223,7 @@ namespace v2rayN.Forms
 
             //日志     
             config.logEnabled = logEnabled;
+            config.showAccessLogs = showAccessLogs;
             config.loglevel = loglevel;
 
             //Mux
