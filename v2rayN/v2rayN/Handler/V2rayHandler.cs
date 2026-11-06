@@ -414,7 +414,10 @@ namespace v2rayN.Handler
                 // 进程可能在枚举端口后立即退出，保留 PID 供用户排查。
             }
 
-            return String.Format(UIRes.I18N("PortOwnerDetails"),
+            // Mark each owner row as Error so MainForm's configured log-level
+            // filter does not hide the port/PID/process details while retaining
+            // the timeout error itself.
+            return "[Error] " + String.Format(UIRes.I18N("PortOwnerDetails"),
                 protocol, address, port, processId, processName);
         }
 
