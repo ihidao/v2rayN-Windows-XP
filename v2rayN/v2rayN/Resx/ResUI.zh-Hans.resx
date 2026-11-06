@@ -343,7 +343,7 @@
     <value>PAC服务启动失败,请用管理员启动</value>
   </data>
   <data name="StartService" xml:space="preserve">
-    <value>启动服务({0})...</value>
+    <value>启动服务...</value>
   </data>
   <data name="SuccessfulConfiguration" xml:space="preserve">
     <value>配置成功
