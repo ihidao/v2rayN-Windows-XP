@@ -183,14 +183,23 @@ namespace v2rayN.Forms
         }
         private void MyAppExit(bool blWindowsShutDown)
         {
+            startupExiting = true;
+
+            // Stop the core independently so a shutdown error cannot skip proxy cleanup.
             try
             {
-                startupExiting = true;
                 // 不在 UI 线程等待后台启动；若启动过程随后完成，worker 的 finally 会再次停止核心。
                 if (v2rayHandler != null)
                     v2rayHandler.V2rayStop();
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[Exit] Stop core failed: " + ex.Message, ex);
+            }
 
-                //HttpProxyHandle.CloseHttpAgent(config);
+            // Always attempt proxy cleanup, even if stopping the core failed.
+            try
+            {
                 if (blWindowsShutDown)
                 {
                     HttpProxyHandle.ResetIEProxy4WindowsShutDown();
@@ -199,12 +208,38 @@ namespace v2rayN.Forms
                 {
                     HttpProxyHandle.UpdateSysProxy(config, true);
                 }
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[Exit] Clear system proxy failed: " + ex.Message, ex);
+            }
 
+            try
+            {
                 ConfigHandler.SaveConfig(ref config);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[Exit] Save configuration failed: " + ex.Message, ex);
+            }
+
+            try
+            {
                 statistics?.SaveToFile();
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[Exit] Save statistics failed: " + ex.Message, ex);
+            }
+
+            try
+            {
                 statistics?.Close();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("[Exit] Close statistics failed: " + ex.Message, ex);
+            }
         }
 
         private void RestoreUI()
