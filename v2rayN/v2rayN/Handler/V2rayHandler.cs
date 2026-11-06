@@ -175,7 +175,15 @@ namespace v2rayN.Handler
 
                     conflicts.AppendLine(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
                 }
+            }
+            catch (Exception ex)
+            {
+                // TCP 查询失败不影响继续查询 UDP，也不阻止核心自行验证绑定。
+                Utils.SaveLog("[PortCheck] Unable to inspect TCP port owners; core will verify binding: " + ex.Message, ex);
+            }
 
+            try
+            {
                 foreach (UdpOwnerRow row in GetUdpOwners())
                 {
                     int port = GetHostPort(row.localPort);
@@ -191,9 +199,8 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                // 查询 API 不可用时不误杀程序，也不阻止核心自行尝试绑定。
-                Utils.SaveLog("[PortCheck] Unable to inspect port owners; core will verify binding: " + ex.Message, ex);
-                return false;
+                // UDP 查询失败不丢弃已经找到的 TCP 冲突。
+                Utils.SaveLog("[PortCheck] Unable to inspect UDP port owners; core will verify binding: " + ex.Message, ex);
             }
 
             if (conflicts.Length == 0)
