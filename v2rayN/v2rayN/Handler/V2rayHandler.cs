@@ -317,7 +317,8 @@ namespace v2rayN.Handler
                     if (!IsAddressConflict(listenAddress, boundAddress))
                         continue;
 
-                    conflicts.AppendLine(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
+                    if (conflicts.Length > 0) conflicts.Append(" | ");
+                    conflicts.Append(FormatPortOwner("TCP", boundAddress, port, row.owningPid));
                 }
 
                 // UDP 没有 LISTENING 状态，按实际绑定端口及 owning PID 判断。
@@ -331,7 +332,8 @@ namespace v2rayN.Handler
                     if (!IsAddressConflict(listenAddress, boundAddress))
                         continue;
 
-                    conflicts.AppendLine(FormatPortOwner("UDP", boundAddress, port, row.owningPid));
+                    if (conflicts.Length > 0) conflicts.Append(" | ");
+                    conflicts.Append(FormatPortOwner("UDP", boundAddress, port, row.owningPid));
                 }
             }
             catch (Exception ex)
@@ -347,7 +349,7 @@ namespace v2rayN.Handler
                 return false;
 
             message = UIRes.I18N("InboundPortConflictPrefix")
-                + Environment.NewLine + conflicts.ToString()
+                + " " + conflicts.ToString() + " "
                 + UIRes.I18N("InboundPortConflictSuffix");
             return true;
         }
@@ -391,8 +393,7 @@ namespace v2rayN.Handler
 
             // Keep the last owner snapshot: otherwise the user only sees a generic
             // timeout and cannot identify which port and process blocked startup.
-            message = lastConflict
-                + Environment.NewLine
+            message = lastConflict + " "
                 + UIRes.I18N("PortReleaseTimeout");
             return true;
         }
