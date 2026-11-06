@@ -541,6 +541,7 @@ namespace v2rayN.Handler
             Stopwatch startupWatch = new Stopwatch();
             Process p = new Process();
             StringBuilder errorText = new StringBuilder();
+            bool processStarted = false;
             p.StartInfo = new ProcessStartInfo
             {
                 FileName = fileName,
@@ -588,6 +589,7 @@ namespace v2rayN.Handler
             {
                 if (!p.Start())
                     throw new Exception("Process.Start returned false.");
+                processStarted = true;
 
                 startupWatch.Start();
                 Utils.SaveLog("[CoreStartup] Process created; PID=" + p.Id
@@ -667,23 +669,26 @@ namespace v2rayN.Handler
             {
                 lock (errorText) failure = errorText.ToString();
                 failure = ex.Message + (String.IsNullOrEmpty(failure) ? "" : Environment.NewLine + failure);
-                try
+                if (processStarted)
                 {
-                    if (!p.HasExited)
+                    try
                     {
-                        p.Kill();
-                        if (!p.WaitForExit(5000))
+                        if (!p.HasExited)
                         {
-                            canFallback = false;
-                            failure += Environment.NewLine + "启动异常后的内核进程仍未退出，已禁止尝试第二种启动参数。PID="
-                                + p.Id;
+                            p.Kill();
+                            if (!p.WaitForExit(5000))
+                            {
+                                canFallback = false;
+                                failure += Environment.NewLine + "启动异常后的内核进程仍未退出，已禁止尝试第二种启动参数。PID="
+                                    + p.Id;
+                            }
                         }
                     }
-                }
-                catch (Exception stopEx)
-                {
-                    canFallback = false;
-                    failure += Environment.NewLine + "无法确认启动异常进程已退出: " + stopEx.Message;
+                    catch (Exception stopEx)
+                    {
+                        canFallback = false;
+                        failure += Environment.NewLine + "无法确认启动异常进程已退出: " + stopEx.Message;
+                    }
                 }
                 try { p.Dispose(); } catch { }
                 return null;
