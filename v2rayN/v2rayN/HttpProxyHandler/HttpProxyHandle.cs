@@ -172,7 +172,11 @@ namespace v2rayN.HttpProxyHandler
                 else if (type == ESysProxyType.ForcedClear)
                 {
                     // Clearing the system proxy does not require a valid HTTP inbound port.
-                    SysProxyHandle.ResetIEProxy();
+                    if (!SysProxyHandle.ResetIEProxy())
+                    {
+                        Utils.SaveLog("[SysProxy] Failed to clear system proxy settings.");
+                        return false;
+                    }
                 }
                 else if (type == ESysProxyType.Unchanged)
                 {
@@ -181,7 +185,8 @@ namespace v2rayN.HttpProxyHandler
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Utils.SaveLog("[SysProxy] Failed to update system proxy: " + ex.Message, ex);
+                return false;
             }
             return true;
         }
