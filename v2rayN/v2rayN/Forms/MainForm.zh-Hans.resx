@@ -382,7 +382,7 @@
     <value>195, 22</value>
   </data>
   <data name="menuRoutings.Text" xml:space="preserve">
-    <value>路由</value>
+    <value>路由规则</value>
   </data>
   <data name="menuServers.Size" type="System.Drawing.Size, System.Drawing">
     <value>195, 22</value>
