@@ -141,7 +141,7 @@
     <value>6, 283</value>
   </data>
   <data name="chklogEnabled.Text" xml:space="preserve">
-    <value>Record local logs</value>
+    <value>Save core logs</value>
   </data>
   <data name="&gt;&gt;chkIgnoreGeoUpdateCore.Parent" xml:space="preserve">
     <value>tabPage7</value>
