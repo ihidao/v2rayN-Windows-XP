@@ -1048,7 +1048,7 @@ namespace v2rayN.Handler
 
         private void V2rayStart()
         {
-            ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
+            ShowMsg(false, UIRes.I18N("StartService"));
             try
             {
                 string fileName = V2rayFindexe();
@@ -1078,7 +1078,7 @@ namespace v2rayN.Handler
 
         private int V2rayStartNew(string configStr, List<int> ports)
         {
-            ShowMsg(false, string.Format(UIRes.I18N("StartService"), DateTime.Now.ToString()));
+            ShowMsg(false, UIRes.I18N("StartService"));
             string tempConfigFile = null;
             Process p = null;
             try
