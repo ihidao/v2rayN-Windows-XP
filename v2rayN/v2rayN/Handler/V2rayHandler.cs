@@ -118,11 +118,6 @@ namespace v2rayN.Handler
                     Utils.SaveLog(conflict);
                     return;
                 }
-                {
-                    ShowMsg(false, conflict);
-                    Utils.SaveLog(conflict);
-                    return;
-                }
 
                 ShowMsg(true, msg);
                 V2rayStart();
