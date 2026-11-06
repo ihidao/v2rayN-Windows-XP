@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using v2rayN.Tool;
 
 namespace v2rayN.HttpProxyHandler
 {
@@ -10,7 +11,7 @@ namespace v2rayN.HttpProxyHandler
     /// </summary>
     public static class SysProxyHandle
     {
-        private const string InternetSettingsPath = @"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+        private const string InternetSettingsPath = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
 
         [DllImport("wininet.dll", SetLastError = true)]
         private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
