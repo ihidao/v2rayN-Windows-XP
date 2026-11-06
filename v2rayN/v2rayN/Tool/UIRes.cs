@@ -45,7 +45,7 @@ namespace v2rayN
             { "InboundPortConflictSuffix", new[] { "Close the listed program or change the local inbound port in v2rayN. To avoid terminating unrelated software, v2rayN will not stop external processes.", "请关闭对应程序或修改 v2rayN 的本地入站端口。为避免误杀其他软件，v2rayN 不会结束这些外部进程。" } },
             { "PortReleaseTimeout", new[] { "Timed out waiting for the local port to be released. Check whether another program is using it.", "本地端口释放超时，请检查是否有其他程序占用端口。" } },
             { "Unknown", new[] { "Unknown", "未知" } },
-            { "PortOwnerDetails", new[] { "{0} {1}:{2}, PID={3}, process={4}", "{0} {1}:{2}，PID={3}，进程={4}" } },
+            { "PortOwnerDetails", new[] { "Local port {0} is occupied by process {1} (PID: {2})", "本地端口 {0} 已被进程 {1} (PID: {2}) 占用" } },
             { "SpeedtestPortAllocateFailed", new[] { "Unable to allocate a speed-test port", "无法分配测速端口" } },
             { "OldCoreStillExitingWithPid", new[] { "The previous core process is still exiting. Startup was cancelled. PID=", "旧内核进程仍在退出，已取消本次启动。PID=" } },
             { "CoreExitedAfterStart", new[] { "The core process exited shortly after startup.", "内核进程启动后未能保持运行。" } },
