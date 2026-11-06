@@ -195,7 +195,7 @@ namespace v2rayN.Mode
         public string systemProxyExceptions
         {
             get; set;
-        }
+        } = Global.IEProxyExceptions;
 
         #region 函数
 
