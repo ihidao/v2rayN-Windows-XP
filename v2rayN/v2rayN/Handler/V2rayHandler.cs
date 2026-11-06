@@ -686,21 +686,21 @@ namespace v2rayN.Handler
                     if (parts.Length >= 2)
                         detectedCoreNameVersion = parts[0] + " " + parts[1];
                 }
-                if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
-                {
+                // Forward every core output line to the GUI. MainForm applies the
+                // configured log level and high-volume connection-log filtering.
+                // Core file logging remains controlled independently by logEnabled.
+                if (IsImportantCoreDiagnostic(e.Data))
                     Utils.SaveLogDetail("CORE", e.Data);
-                    ShowMsg(false, e.Data + Environment.NewLine);
-                }
+                ShowMsg(false, e.Data + Environment.NewLine);
             };
             DataReceivedEventHandler errorHandler = (sender, e) =>
             {
                 if (String.IsNullOrEmpty(e.Data)) return;
                 lock (errorText) errorText.AppendLine(e.Data);
-                if (!IsRoutineCoreOutput(e.Data) && IsImportantCoreDiagnostic(e.Data))
-                {
+                // Keep stderr diagnostics visible through the same GUI filtering path.
+                if (IsImportantCoreDiagnostic(e.Data))
                     Utils.SaveLogDetail("CORE", e.Data);
-                    ShowMsg(false, e.Data + Environment.NewLine);
-                }
+                ShowMsg(false, e.Data + Environment.NewLine);
             };
             p.OutputDataReceived += outputHandler;
             p.ErrorDataReceived += errorHandler;
