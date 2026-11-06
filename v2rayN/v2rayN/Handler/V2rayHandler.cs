@@ -561,7 +561,7 @@ namespace v2rayN.Handler
                 if (banner.StartsWith("V2Ray ", StringComparison.OrdinalIgnoreCase)
                     || banner.StartsWith("Xray ", StringComparison.OrdinalIgnoreCase))
                 {
-                    string[] parts = banner.Split(new char[] { ' ', '\\t' },
+                    string[] parts = banner.Split(new char[] { ' ', '\t' },
                         StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2)
                         detectedCoreNameVersion = parts[0] + " " + parts[1];
