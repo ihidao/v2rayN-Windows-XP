@@ -112,7 +112,7 @@ namespace v2rayN.Handler
                 }
 
                 string conflict;
-                if (FindInboundPortConflict(config, out conflict))
+                if (WaitForInboundPortsRelease(config, out conflict))
                 {
                     ShowMsg(false, conflict);
                     Utils.SaveLog(conflict);
@@ -203,6 +203,41 @@ namespace v2rayN.Handler
 
             message = "检测到 v2rayN 配置的本地端口仍被其他进程占用："
                 + Environment.NewLine + conflicts.ToString()
+                + "请关闭对应程序或修改 v2rayN 的本地入站端口。v2rayN 不会自动结束这些非内核进程。";
+            return true;
+        }
+
+        /// <summary>
+        /// 内核进程退出后，等待 Windows 网络栈释放其 TCP/UDP 监听端口。
+        /// 仅检查 TCP LISTENING 和 UDP 绑定，不把 TCP TIME_WAIT 当作端口占用。
+        /// 正常情况下第一次检查即可通过；短暂残留时最多等待 3 秒。
+        /// </summary>
+        private bool WaitForInboundPortsRelease(Config config, out string message)
+        {
+            const int timeoutMs = 3000;
+            const int retryIntervalMs = 100;
+            Stopwatch waitWatch = Stopwatch.StartNew();
+            string lastConflict = String.Empty;
+
+            while (true)
+            {
+                if (!FindInboundPortConflict(config, out lastConflict))
+                {
+                    if (waitWatch.ElapsedMilliseconds > 0)
+                        Utils.SaveLog("[PortCheck] Configured inbound ports released after "
+                            + waitWatch.ElapsedMilliseconds + " ms.");
+                    message = String.Empty;
+                    return false;
+                }
+
+                if (waitWatch.ElapsedMilliseconds >= timeoutMs)
+                    break;
+
+                System.Threading.Thread.Sleep(retryIntervalMs);
+            }
+
+            message = "等待内核端口释放超时（" + timeoutMs + " ms），检测到端口仍被占用："
+                + Environment.NewLine + lastConflict
                 + "请关闭对应程序或修改 v2rayN 的本地入站端口。v2rayN 不会自动结束这些非内核进程。";
             return true;
         }
