@@ -352,7 +352,7 @@ namespace v2rayN.Handler
         /// <summary>
         /// 内核进程退出后，等待 Windows 网络栈释放其 TCP/UDP 监听端口。
         /// 仅检查 TCP LISTENING 和 UDP 绑定，不把 TCP TIME_WAIT 当作端口占用。
-        /// 正常情况下第一次检查即可通过；短暂残留时最多等待 3 秒。
+        /// 每 100ms 检查一次，最多等待 1 秒；超时保留端口及占用进程详情。
         /// </summary>
         private bool WaitForInboundPortsRelease(Config config, out string message)
         {
@@ -386,7 +386,11 @@ namespace v2rayN.Handler
                 System.Threading.Thread.Sleep(retryIntervalMs);
             }
 
-            message = UIRes.I18N("PortReleaseTimeout");
+            // Keep the last owner snapshot: otherwise the user only sees a generic
+            // timeout and cannot identify which port and process blocked startup.
+            message = lastConflict
+                + Environment.NewLine
+                + UIRes.I18N("PortReleaseTimeout");
             return true;
         }
 
