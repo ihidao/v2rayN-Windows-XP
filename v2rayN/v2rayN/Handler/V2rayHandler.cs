@@ -83,11 +83,14 @@ namespace v2rayN.Handler
                     return;
                 }
 
-                // 启动前结束当前程序目录中的全部 v2ray/wv2ray/xray 内核进程，
-                // 并等待它们完全退出，避免残留内核继续占用端口。
-                if (!V2rayStop())
+                // 先停止本程序自己管理的旧核心，再做端口预检。
+                // 否则旧核心仍占用 SOCKS/HTTP 端口，会被误判为外部端口冲突。
+                V2rayStop();
+
+                // Do not start a second core while the previous process is still alive.
+                if (IsCoreRunning)
                 {
-                    string stopMessage = "检测到内核进程未能全部结束，已取消本次启动。请检查权限或手动结束残留进程。";
+                    string stopMessage = "旧内核进程尚未完全退出，已取消本次启动。请稍后重试。";
                     ShowMsg(false, stopMessage);
                     Utils.SaveLog(stopMessage);
                     return;
@@ -270,96 +273,30 @@ namespace v2rayN.Handler
             V2rayStart();
         }
 
-        /// <summary>
-        /// 结束当前程序目录中的全部 v2ray、wv2ray 和 xray 内核进程。
-        /// 通过进程映像完整路径限定范围，避免误杀其他目录中的同名程序。
-        /// </summary>
-        public bool V2rayStop()
+        public void V2rayStop()
         {
-            bool allStopped = true;
-            string appDirectory = Path.GetFullPath(Utils.StartupPath())
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar;
-            string[] coreNames = new string[] { "wv2ray", "v2ray", "xray" };
-            List<int> handledPids = new List<int>();
-
-            foreach (string coreName in coreNames)
+            try
             {
-                Process[] processes = null;
-                try
+                // 只停止由当前 V2rayHandler 启动并持有的进程。
+                // 不再按进程名扫描并结束同目录内核，避免误杀其他程序启动/使用的核心。
+                if (_process != null)
                 {
-                    processes = Process.GetProcessesByName(coreName);
-                }
-                catch (Exception ex)
-                {
-                    Utils.SaveLog("无法枚举内核进程 " + coreName + ": " + ex.Message, ex);
-                    allStopped = false;
-                    continue;
-                }
+                    Process oldProcess = _process;
+                    KillProcess(oldProcess);
 
-                foreach (Process process in processes)
-                {
-                    try
-                    {
-                        if (handledPids.Contains(process.Id))
-                            continue;
-                        handledPids.Add(process.Id);
+                    // Never forget a process that is still alive: the next start
+                    // must not race its UDP/TCP listeners being released.
+                    if (!oldProcess.HasExited)
+                        throw new InvalidOperationException("旧内核进程仍在退出，已取消本次启动。PID=" + oldProcess.Id);
 
-                        // 只处理与当前 v2rayN 同目录的内核程序。
-                        string processPath = process.MainModule.FileName;
-                        if (String.IsNullOrEmpty(processPath)
-                            || !Path.GetFullPath(processPath).StartsWith(
-                                appDirectory, StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        KillProcess(process);
-                        if (!process.HasExited)
-                        {
-                            allStopped = false;
-                            Utils.SaveLog("内核进程未能结束。PID=" + process.Id
-                                + "; Path=" + processPath);
-                        }
-
-                        if (_process != null && _process.Id == process.Id && process.HasExited)
-                            _process = null;
-                    }
-                    catch (Exception ex)
-                    {
-                        allStopped = false;
-                        Utils.SaveLog("结束内核进程失败: " + ex.Message, ex);
-                    }
-                    finally
-                    {
-                        try { process.Dispose(); } catch { }
-                    }
+                    oldProcess.Dispose();
+                    _process = null;
                 }
             }
-
-            // 额外确认由当前 Handler 持有的进程已经退出。
-            if (_process != null)
+            catch (Exception ex)
             {
-                try
-                {
-                    if (!_process.HasExited)
-                    {
-                        KillProcess(_process);
-                        if (!_process.HasExited)
-                            allStopped = false;
-                    }
-                    if (_process.HasExited)
-                    {
-                        _process.Dispose();
-                        _process = null;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    allStopped = false;
-                    Utils.SaveLog("确认当前内核进程退出失败: " + ex.Message, ex);
-                }
+                Utils.SaveLog(ex.Message, ex);
             }
-
-            return allStopped;
         }
 
         public void V2rayStopPid(int pid)
@@ -685,8 +622,7 @@ namespace v2rayN.Handler
                 if (p == null)
                     throw new Exception(failure);
 
-                // 核心保持 Normal，给前台 v2rayN 主程序留出更高调度优先级。
-                try { p.PriorityClass = ProcessPriorityClass.Normal; } catch { }
+                try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                 _process = p;
                 Global.processJob.AddProcess(p.Handle);
                 ShowMsg(false, coreNameVersion + " started successfully (PID=" + p.Id
