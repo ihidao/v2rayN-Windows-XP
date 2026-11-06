@@ -46,6 +46,7 @@
             this.label1 = new System.Windows.Forms.Label();
             this.chkudpEnabled = new System.Windows.Forms.CheckBox();
             this.chklogEnabled = new System.Windows.Forms.CheckBox();
+            this.chkShowAccessLogs = new System.Windows.Forms.CheckBox();
             this.cmbloglevel = new System.Windows.Forms.ComboBox();
             this.label5 = new System.Windows.Forms.Label();
             this.txtlocalPort = new System.Windows.Forms.TextBox();
@@ -138,6 +139,7 @@
             this.groupBox1.Controls.Add(this.cmbprotocol);
             this.groupBox1.Controls.Add(this.label1);
             this.groupBox1.Controls.Add(this.chkudpEnabled);
+            this.groupBox1.Controls.Add(this.chkShowAccessLogs);
             this.groupBox1.Controls.Add(this.chklogEnabled);
             this.groupBox1.Controls.Add(this.cmbloglevel);
             this.groupBox1.Controls.Add(this.label5);
@@ -229,6 +231,12 @@
             resources.ApplyResources(this.chklogEnabled, "chklogEnabled");
             this.chklogEnabled.Name = "chklogEnabled";
             this.chklogEnabled.UseVisualStyleBackColor = true;
+            // 
+            // chkShowAccessLogs
+            // 
+            resources.ApplyResources(this.chkShowAccessLogs, "chkShowAccessLogs");
+            this.chkShowAccessLogs.Name = "chkShowAccessLogs";
+            this.chkShowAccessLogs.UseVisualStyleBackColor = true;
             // 
             // cmbloglevel
             // 
@@ -530,6 +538,7 @@
         private System.Windows.Forms.TextBox txtlocalPort;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.CheckBox chklogEnabled;
+        private System.Windows.Forms.CheckBox chkShowAccessLogs;
         private System.Windows.Forms.CheckBox chkudpEnabled;
         private System.Windows.Forms.Panel panel1;
         private System.Windows.Forms.TabControl tabControl1;
