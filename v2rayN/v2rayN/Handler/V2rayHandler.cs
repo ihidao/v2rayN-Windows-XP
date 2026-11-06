@@ -690,8 +690,8 @@ namespace v2rayN.Handler
                         detectedCoreNameVersion = parts[0] + " " + parts[1];
                 }
                 // Forward every core output line to the GUI. MainForm applies the
-                // configured log level and high-volume connection-log filtering.
-                // Core file logging remains controlled independently by logEnabled.
+                // configured log level and display filtering. When requested, the
+                // same output is also copied to Vaccess.log / Verror.log below.
                 if (IsImportantCoreDiagnostic(e.Data))
                     Utils.SaveLogDetail("CORE", e.Data);
                 if (saveLogs)
